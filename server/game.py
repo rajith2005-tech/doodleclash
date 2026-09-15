@@ -399,6 +399,15 @@ class GameEngine:
                 drawer.score += drawer_pts
                 drawer.round_score += drawer_pts
 
+            if not player.is_bot and player.ws:
+                await self.send_to(player.ws, {
+                    "type": "guess_feedback",
+                    "result": "correct",
+                    "guess": raw_guess,
+                    "points": total_earned,
+                    "message": f"CORRECT! You scored +{total_earned} pts!"
+                })
+
             await self.broadcast(room, {
                 "type": "player_guessed_correctly",
                 "player_id": player.id,
@@ -421,12 +430,26 @@ class GameEngine:
             if dist <= (1 if len(target_word) <= 5 else 2):
                 if not player.is_bot and player.ws:
                     await self.send_to(player.ws, {
+                        "type": "guess_feedback",
+                        "result": "close",
+                        "guess": raw_guess,
+                        "message": f"'{raw_guess}' is very close!"
+                    })
+                    await self.send_to(player.ws, {
                         "type": "close_guess_hint",
                         "message": f"'{raw_guess}' is very close!"
                     })
                 return
 
-        # Regular Chat Message
+        # Regular Chat / Incorrect Guess Message
+        if not player.is_bot and player.ws:
+            await self.send_to(player.ws, {
+                "type": "guess_feedback",
+                "result": "incorrect",
+                "guess": raw_guess,
+                "message": f"'{raw_guess}' is not correct, keep trying!"
+            })
+
         await self.broadcast(room, {
             "type": "chat_message",
             "player_id": player.id,
@@ -436,7 +459,8 @@ class GameEngine:
         })
 
     async def end_drawing_turn(self, room: Room, reason: str = "time_up"):
-        if room.timer_task and not room.timer_task.done():
+        curr_task = asyncio.current_task()
+        if room.timer_task and room.timer_task != curr_task and not room.timer_task.done():
             room.timer_task.cancel()
         if room.bot_draw_task and not room.bot_draw_task.done():
             room.bot_draw_task.cancel()
@@ -468,10 +492,12 @@ class GameEngine:
         await self.start_turn_word_choice(room)
 
     async def end_game(self, room: Room):
-        if room.timer_task and not room.timer_task.done():
+        curr_task = asyncio.current_task()
+        if room.timer_task and room.timer_task != curr_task and not room.timer_task.done():
             room.timer_task.cancel()
         if room.bot_draw_task and not room.bot_draw_task.done():
             room.bot_draw_task.cancel()
+
 
         room.state = "GAME_OVER"
         sorted_players = sorted(room.players.values(), key=lambda p: p.score, reverse=True)

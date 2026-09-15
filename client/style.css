@@ -964,7 +964,84 @@ input:focus, select:focus, textarea:focus {
   accent-color: var(--primary);
 }
 
+/* Dedicated Guess Judge Bar */
+.guess-judge-bar {
+  padding: 12px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: rgba(15, 23, 42, 0.95);
+  border-top: 1px solid var(--border-glass);
+}
+
+.guess-judge-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 8px 14px;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-glass);
+  color: var(--text-muted);
+  transition: all 0.3s ease;
+}
+
+.guess-judge-status.correct {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.25), rgba(5, 150, 105, 0.15));
+  border-color: var(--success);
+  color: #6ee7b7;
+  box-shadow: 0 0 16px rgba(16, 185, 129, 0.35);
+}
+
+.guess-judge-status.close {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.25), rgba(217, 119, 6, 0.15));
+  border-color: var(--warning);
+  color: #fde68a;
+  box-shadow: 0 0 16px rgba(245, 158, 11, 0.35);
+  animation: pulseClose 0.4s ease;
+}
+
+.guess-judge-status.incorrect {
+  background: rgba(239, 68, 68, 0.18);
+  border-color: var(--danger);
+  color: #fca5a5;
+  animation: shakeIncorrect 0.4s ease;
+}
+
+@keyframes pulseClose {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.03); }
+  100% { transform: scale(1); }
+}
+
+@keyframes shakeIncorrect {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-6px); }
+  75% { transform: translateX(6px); }
+}
+
+.guess-judge-form {
+  display: flex;
+  gap: 10px;
+}
+
+.guess-judge-form input {
+  flex: 1;
+  font-size: 15px;
+  font-weight: 700;
+  padding: 12px 18px;
+  border: 2px solid var(--border-glass);
+}
+
+.guess-judge-form input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 15px var(--primary-glow);
+}
+
 /* Right Chat & Reactions Stream */
+
 .chat-panel {
   padding: 16px;
   display: flex;

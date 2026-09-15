@@ -475,6 +475,23 @@ class DoodleApp {
       };
     }
 
+    // Dedicated Guess Judge Form
+    const guessJudgeForm = document.getElementById('guessJudgeForm');
+    if (guessJudgeForm) {
+      guessJudgeForm.onsubmit = (e) => {
+        e.preventDefault();
+        const input = document.getElementById('dedicatedGuessInput');
+        const text = input.value.trim();
+        if (!text) return;
+        this.send({
+          type: 'chat_message',
+          message: text
+        });
+        input.value = '';
+      };
+    }
+
+
     // Floating Emoji Reaction Buttons
     document.querySelectorAll('.btn-reaction').forEach(btn => {
       btn.onclick = () => {
@@ -689,8 +706,13 @@ class DoodleApp {
         window.soundEngine.playCloseGuess();
         break;
 
+      case 'guess_feedback':
+        this.handleGuessFeedback(data);
+        break;
+
       case 'player_guessed_correctly':
         this.appendCorrectGuessBanner(data);
+
         if (data.room_state) {
           this.renderInGameScoreboard(data.room_state.players, data.room_state.drawer_id);
         }
@@ -859,11 +881,56 @@ class DoodleApp {
 
   updateDrawerHUD(isDrawer) {
     const toolbar = document.getElementById('drawingToolbar');
+    const guessBar = document.getElementById('guessJudgeBar');
+    
     if (toolbar) {
+      toolbar.style.display = isDrawer ? 'flex' : 'none';
       toolbar.style.opacity = isDrawer ? '1' : '0.4';
       toolbar.style.pointerEvents = isDrawer ? 'all' : 'none';
     }
+
+    if (guessBar) {
+      guessBar.style.display = isDrawer ? 'none' : 'flex';
+      const statusEl = document.getElementById('guessJudgeStatus');
+      const statusText = document.getElementById('guessStatusText');
+      const input = document.getElementById('dedicatedGuessInput');
+      const btn = document.getElementById('btnJudgeGuess');
+
+      if (statusEl) statusEl.className = 'guess-judge-status';
+      if (statusText) statusText.innerHTML = '🤔 Type your guess below to judge if it\'s correct!';
+      if (input) {
+        input.disabled = false;
+        input.value = '';
+        input.placeholder = 'Enter your guess here (e.g. Pizza, Rocket, Elephant)...';
+        setTimeout(() => input.focus(), 150);
+      }
+      if (btn) btn.disabled = false;
+    }
   }
+
+  handleGuessFeedback(data) {
+    const statusEl = document.getElementById('guessJudgeStatus');
+    const statusText = document.getElementById('guessStatusText');
+    const input = document.getElementById('dedicatedGuessInput');
+    const btn = document.getElementById('btnJudgeGuess');
+    if (!statusEl || !statusText) return;
+
+    statusEl.className = `guess-judge-status ${data.result}`;
+
+    if (data.result === 'correct') {
+      statusText.innerHTML = `🎉 <strong>${data.message || 'CORRECT!'}</strong>`;
+      if (input) {
+        input.disabled = true;
+        input.value = `✓ Solved: ${data.guess}`;
+      }
+      if (btn) btn.disabled = true;
+    } else if (data.result === 'close') {
+      statusText.innerHTML = `💡 <strong>Close!</strong> ${data.message || 'Almost there, check spelling!'}`;
+    } else {
+      statusText.innerHTML = `❌ <strong>Not quite:</strong> '${data.guess}' is incorrect. Try again!`;
+    }
+  }
+
 
   renderWordChoicesModal(choices) {
     const grid = document.getElementById('wordChoicesGrid');

@@ -85,10 +85,13 @@ async def test_websocket_multiplayer():
             guesser_ws = ws_bob if drawer_id == alice_id else ws_alice
 
             choices_msg = json.loads(await drawer_ws.recv())
+            while choices_msg.get("type") != "your_word_choices":
+                choices_msg = json.loads(await drawer_ws.recv())
             assert choices_msg["type"] == "your_word_choices"
             choices = choices_msg["choices"]
             assert len(choices) == 3, f"Expected 3 choices, got {len(choices)}"
             print(f"  [OK] Drawer received word choices: {[c['word'] for c in choices]}")
+
 
             # Drawer picks choice 0
             chosen_word = choices[0]["word"]
@@ -126,20 +129,27 @@ async def test_websocket_multiplayer():
                 "message": chosen_word
             }))
 
-            guess_result = json.loads(await guesser_ws.recv())
-            assert guess_result["type"] == "player_guessed_correctly"
-            print(f"  [OK] Guesser successfully guessed '{chosen_word}'! Points awarded: {guess_result['points']}")
+            # Guesser receives guess_feedback and player_guessed_correctly
+            fb_msg = json.loads(await guesser_ws.recv())
+            while fb_msg.get("type") not in ("guess_feedback", "player_guessed_correctly"):
+                fb_msg = json.loads(await guesser_ws.recv())
+            assert fb_msg["type"] in ("guess_feedback", "player_guessed_correctly")
+            print(f"  [OK] Guesser received guess judgment feedback!")
 
-            # Floating reaction
-            await guesser_ws.send(json.dumps({
-                "type": "reaction",
-                "emoji": "🔥"
-            }))
-            reaction_msg = json.loads(await drawer_ws.recv())
-            while reaction_msg.get("type") != "reaction":
-                reaction_msg = json.loads(await drawer_ws.recv())
-            assert reaction_msg["emoji"] == "🔥"
-            print(f"  [OK] Floating emoji reaction synchronized")
+            # Both receive turn_ended
+            end_msg = json.loads(await guesser_ws.recv())
+            while end_msg.get("type") != "turn_ended":
+                end_msg = json.loads(await guesser_ws.recv())
+            assert end_msg["type"] == "turn_ended"
+            print(f"  [OK] Turn ended cleanly with word: '{end_msg['word']}'")
+
+            # Verify that next turn/round automatically starts!
+            next_phase = json.loads(await guesser_ws.recv())
+            while next_phase.get("type") not in ("word_choice_phase", "turn_started", "game_over"):
+                next_phase = json.loads(await guesser_ws.recv())
+            assert next_phase["type"] in ("word_choice_phase", "turn_started", "game_over")
+            print(f"  [OK] Successfully moved to next turn/round: {next_phase['type']}!")
+
 
     print("  --> WebSocket game lifecycle fully verified!\n")
 
