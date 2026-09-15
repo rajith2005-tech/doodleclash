@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DoodleClash 🎨 - Multiplayer Drawing & Guessing Game</title>
+  <meta name="description" content="Real-time multiplayer drawing and guessing game. Challenge friends, draw crazy doodles, make fast guesses, or practice with AI bots!">
+  <link rel="stylesheet" href="style.css">
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+
+  <!-- Top App Navigation Header -->
+  <header class="app-header">
+    <div class="logo-area" id="headerLogo" style="cursor: pointer;">
+      <div class="logo-icon">🎨</div>
+      <div class="logo-text">DoodleClash</div>
+    </div>
+
+    <div class="header-actions">
+      <div id="roomCodeHeaderBadge" class="room-code-badge" style="display: none;">
+        <span class="code-title">Room:</span>
+        <span class="code-value" id="headerRoomCode">------</span>
+      </div>
+
+      <button id="btnShareGame" class="btn-icon" title="Share & Invite Friends" aria-label="Share & Invite Friends">
+        <i data-lucide="share-2"></i>
+      </button>
+
+      <button id="btnSoundToggle" class="btn-icon" title="Toggle Sound" aria-label="Toggle Sound">
+        <i data-lucide="volume-2" id="soundIcon"></i>
+      </button>
+
+      <button id="btnRules" class="btn-icon" title="How to Play" aria-label="How to play">
+        <i data-lucide="help-circle"></i>
+      </button>
+
+      <button id="btnLeaveRoom" class="btn-secondary" style="display: none; padding: 8px 14px; font-size: 13px;">
+        <i data-lucide="log-out" style="width: 16px; height: 16px;"></i> Leave
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Container Viewports -->
+  <main class="main-content">
+
+    <!-- 1. HOME / ENTRY VIEW -->
+    <section id="homeView" class="view-section active">
+      <div class="home-layout">
+        
+        <!-- Left: Profile & Join Setup Card -->
+        <div class="glass-panel hero-card">
+          <div>
+            <div class="hero-badge">
+              <i data-lucide="sparkles" style="width: 14px; height: 14px;"></i> Real-Time Multiplayer
+            </div>
+            <h1 class="hero-title">Draw, Guess, & <span>Clash!</span></h1>
+            <p class="hero-desc">
+              Unleash your inner artist or guess hilarious doodles against friends and intelligent AI bots in real time.
+            </p>
+
+            <!-- Avatar Picker -->
+            <div class="avatar-section">
+              <label class="section-label">Choose Your Avatar</label>
+              <div class="avatar-grid" id="avatarGrid">
+                <!-- Populated via JS -->
+              </div>
+            </div>
+
+            <!-- Nickname Input -->
+            <div class="name-input-group">
+              <label class="section-label">Player Nickname</label>
+              <div style="display: flex; gap: 8px;">
+                <input type="text" id="playerNameInput" placeholder="Enter your nickname..." maxlength="16" value="DoodleMaster">
+                <button type="button" id="btnRandomName" class="btn-secondary" title="Random Name">
+                  <i data-lucide="shuffle" style="width: 16px; height: 16px;"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <!-- Create / Join Actions -->
+            <div class="action-buttons-row">
+              <button id="btnOpenCreateModal" class="btn-primary">
+                <i data-lucide="plus-circle" style="width: 18px; height: 18px;"></i> Create Room
+              </button>
+              <button id="btnOpenJoinModal" class="btn-secondary">
+                <i data-lucide="log-in" style="width: 18px; height: 18px;"></i> Join Code
+              </button>
+            </div>
+
+            <!-- Solo Play Banner -->
+            <div class="solo-mode-card">
+              <div>
+                <div class="solo-mode-text">⚡ Solo Practice Mode</div>
+                <div style="font-size: 11px; color: var(--text-muted);">Play instantly with AI DoodleBot!</div>
+              </div>
+              <button id="btnPlaySolo" class="btn-accent" style="font-size: 12px; padding: 6px 12px;">
+                Play Now
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: Public Rooms Browser Card -->
+        <div class="glass-panel rooms-card">
+          <div class="rooms-header">
+            <div>
+              <h3>Public Lobbies</h3>
+              <p style="font-size: 13px; color: var(--text-muted);">Hop into an active game right now</p>
+            </div>
+            <button id="btnRefreshRooms" class="btn-icon" title="Refresh Lobbies">
+              <i data-lucide="rotate-cw" style="width: 16px; height: 16px;"></i>
+            </button>
+          </div>
+
+          <div class="room-search-bar">
+            <input type="text" id="roomSearchInput" placeholder="Search room by name or host...">
+          </div>
+
+          <div class="public-rooms-list" id="publicRoomsList">
+            <div style="text-align: center; color: var(--text-muted); padding: 40px 0;">
+              <i data-lucide="compass" style="width: 32px; height: 32px; margin-bottom: 8px; opacity: 0.5;"></i>
+              <p>Scanning for active rooms...</p>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- 2. LOBBY WAITING ROOM VIEW -->
+    <section id="lobbyView" class="view-section">
+      <div class="lobby-layout">
+        
+        <div class="glass-panel lobby-main-card">
+          <div class="lobby-top-bar">
+            <div>
+              <h2 id="lobbyRoomName" style="font-size: 24px; font-weight: 800;">Doodle Arena</h2>
+              <p style="color: var(--text-muted); font-size: 13px;">Waiting for host to start...</p>
+            </div>
+
+            <div class="room-code-badge" id="lobbyCodeBadge" title="Click to copy code" style="cursor: pointer;">
+              <div>
+                <div class="code-title">Room Code</div>
+                <div class="code-value" id="lobbyCodeDisplay">------</div>
+              </div>
+              <i data-lucide="copy" style="width: 18px; height: 18px; color: #a5b4fc;"></i>
+            </div>
+          </div>
+
+          <!-- Connected Players Grid -->
+          <div class="players-grid" id="lobbyPlayersGrid">
+            <!-- Rendered via JS -->
+          </div>
+
+          <!-- Lobby Action Buttons -->
+          <div style="display: flex; gap: 12px; flex-wrap: wrap; justify-content: flex-end;">
+            <button id="btnAddBot" class="btn-secondary">
+              <i data-lucide="bot" style="width: 18px; height: 18px;"></i> Add AI Bot
+            </button>
+            <button id="btnToggleReady" class="btn-secondary">
+              <i data-lucide="check-circle" style="width: 18px; height: 18px;"></i> Ready Up
+            </button>
+            <button id="btnStartGame" class="btn-primary" style="display: none;">
+              <i data-lucide="play" style="width: 18px; height: 18px;"></i> Start Match
+            </button>
+          </div>
+        </div>
+
+        <!-- Lobby Right Sidebar: Room Rules -->
+        <div class="glass-panel lobby-sidebar-card">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <h4 style="font-size: 16px; font-weight: 700;">Match Rules</h4>
+            <button id="btnEditSettings" class="btn-icon" title="Edit Rules" style="display: none;">
+              <i data-lucide="sliders" style="width: 16px; height: 16px;"></i>
+            </button>
+          </div>
+
+          <div class="setting-item">
+            <label>Rounds</label>
+            <div id="lobbySettingRounds" style="font-weight: 700; font-size: 15px;">3 Rounds</div>
+          </div>
+
+          <div class="setting-item">
+            <label>Draw Time</label>
+            <div id="lobbySettingDrawTime" style="font-weight: 700; font-size: 15px;">60 Seconds</div>
+          </div>
+
+          <div class="setting-item">
+            <label>Word Categories</label>
+            <div class="category-tags-list" id="lobbySettingCategories">
+              <span class="category-chip">🐶 Animals</span>
+              <span class="category-chip">🍕 Food</span>
+              <span class="category-chip">💻 Tech</span>
+            </div>
+          </div>
+
+          <div class="setting-item">
+            <label>Hints System</label>
+            <div id="lobbySettingHints" style="font-weight: 700; color: var(--success);">Enabled (Reveals over time)</div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- 3. ACTIVE GAME VIEW -->
+    <section id="gameView" class="view-section">
+      <div class="game-layout">
+        
+        <!-- Left: Live Scoreboard -->
+        <div class="glass-panel scoreboard-panel">
+          <div class="scoreboard-title">
+            <span>Scoreboard</span>
+            <span id="playerCountTag">0 Players</span>
+          </div>
+          <div class="scoreboard-list" id="inGameScoreList">
+            <!-- Player cards rendered here -->
+          </div>
+        </div>
+
+        <!-- Center: Drawing Arena -->
+        <div class="glass-panel canvas-arena-panel">
+          
+          <!-- Game HUD -->
+          <div class="game-hud-bar">
+            <div class="round-indicator" id="gameRoundDisplay">Round 1 / 3</div>
+
+            <div class="word-hint-container">
+              <div class="word-hint-letters" id="wordHintLetters">_ _ _ _ _</div>
+              <div class="word-category-tag" id="wordCategoryDisplay">Category: General</div>
+            </div>
+
+            <div class="timer-container">
+              <div class="timer-box" id="gameTimerBox">60</div>
+            </div>
+          </div>
+
+          <!-- Canvas Interactive Area -->
+          <div class="canvas-wrapper" id="canvasWrapper">
+            <canvas id="gameCanvas" width="800" height="600"></canvas>
+            <div class="floating-reactions-layer" id="reactionsLayer"></div>
+          </div>
+
+          <!-- Drawing Toolbar (Only enabled for active drawer) -->
+          <div class="drawing-toolbar" id="drawingToolbar">
+            <!-- Tool selection -->
+            <div class="tool-buttons-group">
+              <button class="tool-btn active" data-tool="brush" title="Brush / Pen">
+                <i data-lucide="brush" style="width: 18px; height: 18px;"></i>
+              </button>
+              <button class="tool-btn" data-tool="pencil" title="Pencil">
+                <i data-lucide="pencil" style="width: 18px; height: 18px;"></i>
+              </button>
+              <button class="tool-btn" data-tool="fill" title="Paint Bucket (Flood Fill)">
+                <i data-lucide="paint-bucket" style="width: 18px; height: 18px;"></i>
+              </button>
+              <button class="tool-btn" data-tool="eraser" title="Eraser">
+                <i data-lucide="eraser" style="width: 18px; height: 18px;"></i>
+              </button>
+              <button class="tool-btn" data-tool="line" title="Straight Line">
+                <i data-lucide="minus" style="width: 18px; height: 18px;"></i>
+              </button>
+              <button class="tool-btn" data-tool="rect" title="Rectangle">
+                <i data-lucide="square" style="width: 18px; height: 18px;"></i>
+              </button>
+              <button class="tool-btn" data-tool="circle" title="Circle">
+                <i data-lucide="circle" style="width: 18px; height: 18px;"></i>
+              </button>
+            </div>
+
+            <!-- Preset Colors -->
+            <div class="color-palette-bar" id="colorPalette">
+              <!-- Rendered via JS -->
+            </div>
+
+            <!-- Custom Color Picker -->
+            <div class="color-picker-wrapper" title="Custom Color">
+              <input type="color" id="customColorInput" class="color-picker-input" value="#6366f1">
+              <div class="color-picker-icon"></div>
+            </div>
+
+            <!-- Size Slider -->
+            <div class="brush-size-group">
+              <span style="font-size: 11px; font-weight: 700; color: var(--text-muted);">SIZE</span>
+              <input type="range" id="brushSizeSlider" class="size-slider" min="2" max="40" value="6">
+            </div>
+
+            <!-- Undo / Redo / Clear -->
+            <div class="tool-buttons-group">
+              <button id="btnUndo" class="tool-btn" title="Undo">
+                <i data-lucide="undo" style="width: 16px; height: 16px;"></i>
+              </button>
+              <button id="btnRedo" class="tool-btn" title="Redo">
+                <i data-lucide="redo" style="width: 16px; height: 16px;"></i>
+              </button>
+              <button id="btnClearCanvas" class="tool-btn" title="Clear Canvas" style="color: #f87171;">
+                <i data-lucide="trash-2" style="width: 16px; height: 16px;"></i>
+              </button>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Right: Real-time Chat & Guessing -->
+        <div class="glass-panel chat-panel">
+          <div class="chat-header">Guesses & Chat</div>
+
+          <div class="chat-messages-box" id="chatMessagesBox">
+            <!-- Streamed messages -->
+          </div>
+
+          <!-- Quick Reaction Emojis -->
+          <div class="reaction-bar">
+            <button class="btn-reaction" data-emoji="🔥">🔥</button>
+            <button class="btn-reaction" data-emoji="👏">👏</button>
+            <button class="btn-reaction" data-emoji="😂">😂</button>
+            <button class="btn-reaction" data-emoji="❤️">❤️</button>
+            <button class="btn-reaction" data-emoji="🎨">🎨</button>
+            <button class="btn-reaction" data-emoji="🤯">🤯</button>
+          </div>
+
+          <!-- Chat Guess Input Form -->
+          <form class="chat-form" id="chatForm">
+            <input type="text" id="chatInput" placeholder="Type your guess here..." autocomplete="off" maxlength="80">
+            <button type="submit" class="btn-primary" style="padding: 10px 16px;">
+              <i data-lucide="send" style="width: 16px; height: 16px;"></i>
+            </button>
+          </form>
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ====================================================== -->
+  <!-- MODALS                                                 -->
+  <!-- ====================================================== -->
+
+  <!-- Modal: Word Choice (Drawer Selection) -->
+  <div class="modal-backdrop" id="wordChoiceModal">
+    <div class="modal-content-card">
+      <h2 style="font-size: 26px; font-weight: 800; margin-bottom: 6px;">Pick a Secret Word</h2>
+      <p style="color: var(--text-muted); font-size: 14px;">Choose the word you want to draw!</p>
+      
+      <div class="word-choices-grid" id="wordChoicesGrid">
+        <!-- 3 choices rendered here -->
+      </div>
+
+      <div style="font-size: 13px; font-weight: 700; color: var(--warning);" id="wordChoiceTimer">
+        Auto-selecting in 15s...
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Round Recap Summary -->
+  <div class="modal-backdrop" id="roundEndModal">
+    <div class="modal-content-card">
+      <div style="font-size: 36px; margin-bottom: 8px;">🎉</div>
+      <h2 style="font-size: 24px; font-weight: 800; margin-bottom: 4px;">Round Finished!</h2>
+      <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 16px;">
+        The secret word was: <strong id="roundEndWord" style="color: var(--accent); font-size: 20px;">---</strong>
+      </p>
+
+      <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-glass); border-radius: var(--radius-md); padding: 14px; margin-bottom: 18px;" id="roundEndLeaderboard">
+        <!-- Ranked player summary -->
+      </div>
+
+      <div style="font-size: 12px; color: var(--text-muted);">Next round starting in a moment...</div>
+    </div>
+  </div>
+
+  <!-- Modal: Grand Game Over Podium -->
+  <div class="modal-backdrop" id="podiumModal">
+    <canvas id="confettiCanvas"></canvas>
+    <div class="modal-content-card" style="z-index: 20;">
+      <h1 style="font-size: 32px; font-weight: 900; margin-bottom: 4px;">👑 Game Over!</h1>
+      <p style="color: var(--text-muted); font-size: 14px;">Behold the master champions of the canvas!</p>
+
+      <!-- 3-Place Podium -->
+      <div class="podium-stage" id="podiumStage">
+        <!-- Rendered dynamically -->
+      </div>
+
+      <!-- Awards & Highlights -->
+      <div id="podiumAwardsList" style="margin-bottom: 24px;"></div>
+
+      <div style="display: flex; gap: 12px; justify-content: center;">
+        <button id="btnRestartGame" class="btn-primary" style="display: none;">
+          <i data-lucide="rotate-ccw" style="width: 16px; height: 16px;"></i> Play Again
+        </button>
+        <button id="btnReturnToLobby" class="btn-secondary">
+          <i data-lucide="home" style="width: 16px; height: 16px;"></i> Return to Lobby
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Create Room Configuration -->
+  <div class="modal-backdrop" id="createRoomModal">
+    <div class="modal-content-card" style="text-align: left;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px;">
+        <h3 style="font-size: 22px; font-weight: 800;">Create Custom Room</h3>
+        <button class="btn-icon btn-close-modal"><i data-lucide="x"></i></button>
+      </div>
+
+      <div class="setting-item" style="margin-bottom: 14px;">
+        <label>Room Name</label>
+        <input type="text" id="inputRoomName" placeholder="My Fun Doodles" maxlength="24">
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px;">
+        <div class="setting-item">
+          <label>Rounds</label>
+          <select id="selectRounds">
+            <option value="2">2 Rounds</option>
+            <option value="3" selected>3 Rounds</option>
+            <option value="5">5 Rounds</option>
+            <option value="8">8 Rounds</option>
+          </select>
+        </div>
+        <div class="setting-item">
+          <label>Draw Time</label>
+          <select id="selectDrawTime">
+            <option value="45">45 Seconds (Fast)</option>
+            <option value="60" selected>60 Seconds (Standard)</option>
+            <option value="90">90 Seconds (Relaxed)</option>
+            <option value="120">120 Seconds (Master)</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="setting-item" style="margin-bottom: 14px;">
+        <label>Word Categories</label>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 13px;" id="createCategoriesList">
+          <label style="display: flex; align-items: center; gap: 6px;"><input type="checkbox" value="animals" checked> 🐶 Animals</label>
+          <label style="display: flex; align-items: center; gap: 6px;"><input type="checkbox" value="food" checked> 🍕 Food & Drinks</label>
+          <label style="display: flex; align-items: center; gap: 6px;"><input type="checkbox" value="objects" checked> 🎸 Objects</label>
+          <label style="display: flex; align-items: center; gap: 6px;"><input type="checkbox" value="tech" checked> 💻 Tech & Sci-Fi</label>
+          <label style="display: flex; align-items: center; gap: 6px;"><input type="checkbox" value="nature" checked> 🌲 Nature</label>
+          <label style="display: flex; align-items: center; gap: 6px;"><input type="checkbox" value="fantasy" checked> ✨ Fantasy</label>
+        </div>
+      </div>
+
+      <div class="setting-item" style="margin-bottom: 20px;">
+        <label>Custom Words (Comma separated)</label>
+        <input type="text" id="inputCustomWords" placeholder="e.g. Iron Man, Spaceship, Lasagna">
+      </div>
+
+      <div style="display: flex; gap: 10px; justify-content: flex-end;">
+        <button class="btn-secondary btn-close-modal">Cancel</button>
+        <button id="btnConfirmCreateRoom" class="btn-primary">Create & Enter</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Join Code -->
+  <div class="modal-backdrop" id="joinRoomModal">
+    <div class="modal-content-card">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px;">
+        <h3 style="font-size: 20px; font-weight: 800;">Join Room with Code</h3>
+        <button class="btn-icon btn-close-modal"><i data-lucide="x"></i></button>
+      </div>
+
+      <div class="setting-item" style="margin-bottom: 20px;">
+        <label>Enter 6-Character Room Code</label>
+        <input type="text" id="inputJoinRoomCode" placeholder="e.g. ABC123" maxlength="8" style="text-align: center; font-size: 22px; font-weight: 800; letter-spacing: 4px; text-transform: uppercase;">
+      </div>
+
+      <div style="display: flex; gap: 10px; justify-content: center;">
+        <button class="btn-secondary btn-close-modal">Cancel</button>
+        <button id="btnConfirmJoinRoom" class="btn-primary">Enter Lobby</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: How to Play Rules -->
+  <div class="modal-backdrop" id="rulesModal">
+    <div class="modal-content-card" style="text-align: left; max-width: 520px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+        <h3 style="font-size: 22px; font-weight: 800;">🎨 How to Play DoodleClash</h3>
+        <button class="btn-icon btn-close-modal"><i data-lucide="x"></i></button>
+      </div>
+      
+      <div style="display: flex; flex-direction: column; gap: 14px; font-size: 14px; color: var(--text-muted); line-height: 1.5;">
+        <div>
+          <strong style="color: var(--text-main);">1. When it's your turn to Draw:</strong>
+          <p>Choose 1 of 3 secret words. Use the brush, pencil, shapes, and paint bucket to sketch it before time expires! The faster people guess, the more points you earn.</p>
+        </div>
+        <div>
+          <strong style="color: var(--text-main);">2. When you are Guessing:</strong>
+          <p>Watch the canvas live! Type your guesses into the chat box. Guess quickly for maximum speed bonus points and multiplier streaks.</p>
+        </div>
+        <div>
+          <strong style="color: var(--text-main);">3. Progressive Hints:</strong>
+          <p>As the clock ticks down, letter blanks <code style="background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px;">_ _ _ _</code> will gradually reveal letters.</p>
+        </div>
+        <div>
+          <strong style="color: var(--text-main);">4. Solo / AI Bot Support:</strong>
+          <p>You can add AI Bots anytime to fill matches or practice solo!</p>
+        </div>
+      </div>
+
+      <div style="margin-top: 24px; text-align: right;">
+        <button class="btn-primary btn-close-modal">Got it!</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Share & Invite -->
+  <div class="modal-backdrop" id="shareModal">
+    <div class="modal-content-card" style="text-align: left; max-width: 500px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+        <h3 style="font-size: 22px; font-weight: 800;">🔗 Share & Invite Friends</h3>
+        <button class="btn-icon btn-close-modal"><i data-lucide="x"></i></button>
+      </div>
+
+      <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 16px;">
+        Friends on your Wi-Fi, hotspot, or network can play instantly in their browser!
+      </p>
+
+      <div class="setting-item" style="margin-bottom: 14px;">
+        <label>Direct Invite Link</label>
+        <div style="display: flex; gap: 8px;">
+          <input type="text" id="shareUrlInput" readonly style="font-size: 13px; font-weight: 600; color: #a5b4fc; background: rgba(0,0,0,0.3);">
+          <button id="btnCopyShareUrl" class="btn-primary" style="padding: 8px 16px; font-size: 13px;">Copy</button>
+        </div>
+      </div>
+
+      <div class="setting-item" style="margin-bottom: 18px;">
+        <label>Room Code</label>
+        <div style="display: flex; gap: 8px;">
+          <input type="text" id="shareCodeInput" readonly style="font-size: 18px; font-weight: 800; letter-spacing: 3px; text-align: center; color: #ffffff; background: rgba(0,0,0,0.3);">
+          <button id="btnCopyShareCode" class="btn-secondary" style="padding: 8px 16px; font-size: 13px;">Copy</button>
+        </div>
+      </div>
+
+      <!-- QR Code Container -->
+      <div style="background: rgba(255, 255, 255, 0.04); border: 1px solid var(--border-glass); border-radius: var(--radius-md); padding: 16px; display: flex; flex-direction: column; align-items: center; gap: 10px; margin-bottom: 16px;">
+        <div style="font-size: 12px; font-weight: 700; color: var(--text-muted);">📱 Scan with Phone / Tablet Camera:</div>
+        <img id="shareQrImage" alt="Scan to join" style="width: 140px; height: 140px; border-radius: 8px; background: white; padding: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.3);">
+      </div>
+
+      <div style="font-size: 12px; color: var(--text-dim); line-height: 1.4;">
+        💡 <em>Note: Make sure your friends are connected to the same Wi-Fi router or Mobile Hotspot.</em>
+      </div>
+    </div>
+  </div>
+
+  <!-- Core Scripts -->
+
+  <script src="audio.js"></script>
+  <script src="canvas.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
