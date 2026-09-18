@@ -13,6 +13,8 @@ import sys
 import threading
 import time
 import uuid
+import select
+import socket
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from typing import Dict, Any
 
@@ -37,10 +39,26 @@ else:
     CLIENT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "client"))
 
 
-# Global Managers
+# Global Server Ports & Managers
+HTTP_PORT = 8000
+WS_PORT = 8001
 room_manager = RoomManager()
 # Map websocket connections to player id
 ws_to_player: Dict[Any, Player] = {}
+
+
+def get_local_lan_ip() -> str:
+    """Auto-detect machine's primary local network (LAN) IP address"""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.settimeout(0.5)
+        # Connect to public DNS without actually sending packets
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return "127.0.0.1"
 
 
 async def send_to_client(ws, data: dict):
@@ -359,14 +377,93 @@ class CustomHTTPHandler(SimpleHTTPRequestHandler):
     def end_headers(self):
         # Enable CORS and caching headers
         self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "*")
         self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
         super().end_headers()
+
+    def do_OPTIONS(self):
+        self.send_response(204)
+        self.end_headers()
+
+    def do_GET(self):
+        # 1. Check for WebSocket Upgrade (Transparent Single-Port Reverse Proxy)
+        upgrade_hdr = self.headers.get("Upgrade", "").lower()
+        if upgrade_hdr == "websocket":
+            self._proxy_websocket()
+            return
+
+        # 2. REST API: Network & Server Info for Local / Online Multiplayer
+        if self.path.startswith("/api/network_info") or self.path.startswith("/api/info"):
+            self._handle_network_info()
+            return
+
+        # 3. Standard Static File Serving
+        super().do_GET()
+
+    def _handle_network_info(self):
+        local_ip = get_local_lan_ip()
+        info = {
+            "status": "online",
+            "version": "2.0.0",
+            "local_ip": local_ip,
+            "http_port": HTTP_PORT,
+            "ws_port": WS_PORT,
+            "lan_url": f"http://{local_ip}:{HTTP_PORT}",
+            "local_ws_url": f"ws://{local_ip}:{WS_PORT}",
+            "single_port_ws": True,
+            "active_rooms": len(room_manager.rooms),
+            "public_rooms": room_manager.get_public_rooms(),
+            "total_players": len(ws_to_player)
+        }
+        body = json.dumps(info, indent=2).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _proxy_websocket(self):
+        """Bidirectionally pipe client TCP connection to backend WebSocket server"""
+        backend = None
+        client_sock = self.connection
+        try:
+            backend = socket.create_connection(("127.0.0.1", WS_PORT), timeout=5)
+            # Forward raw request line and headers
+            req_line = f"{self.command} {self.path} {self.request_version}\r\n".encode("iso-8859-1")
+            headers_raw = self.headers.as_bytes()
+            backend.sendall(req_line + headers_raw + b"\r\n")
+
+            self.close_connection = True
+            sockets = [client_sock, backend]
+            while True:
+                readable, _, exceptional = select.select(sockets, [], sockets, 60.0)
+                if exceptional:
+                    break
+                if not readable:
+                    continue
+                for s in readable:
+                    data = s.recv(65536)
+                    if not data:
+                        return
+                    target = backend if s is client_sock else client_sock
+                    target.sendall(data)
+        except Exception as e:
+            logger.debug(f"WebSocket proxy connection ended: {e}")
+        finally:
+            if backend:
+                try:
+                    backend.close()
+                except Exception:
+                    pass
 
     def log_message(self, format, *args):
         pass  # Quiet down HTTP logs
 
 
 def start_http_server(host="0.0.0.0", port=8000):
+    global HTTP_PORT
+    HTTP_PORT = port
     httpd = ThreadingHTTPServer((host, port), CustomHTTPHandler)
     logger.info(f"HTTP Server serving '{CLIENT_DIR}' at http://localhost:{port}")
     http_thread = threading.Thread(target=httpd.serve_forever, daemon=True)
@@ -375,13 +472,19 @@ def start_http_server(host="0.0.0.0", port=8000):
 
 
 async def main(host="0.0.0.0", http_port=8000, ws_port=8001):
+    global HTTP_PORT, WS_PORT
+    HTTP_PORT = http_port
+    WS_PORT = ws_port
+
     start_http_server(host, http_port)
+    local_lan = get_local_lan_ip()
     logger.info(f"Starting WebSocket server on ws://{host}:{ws_port}")
     async with ws_serve(ws_handler, host, ws_port):
         print("\n=======================================================")
-        print(" [*] DoodleClash server is running!")
-        print(f" [>] Web Application:  http://localhost:{http_port}")
-        print(f" [>] WebSocket Server: ws://localhost:{ws_port}")
+        print(" [*] DoodleClash Multiplayer Server is Running!")
+        print(f" [>] Local Browser:      http://localhost:{http_port}")
+        print(f" [>] Local LAN / Wi-Fi:  http://{local_lan}:{http_port}")
+        print(f" [>] WebSocket Ports:    Port {http_port} (Unified) & Port {ws_port}")
         print("=======================================================\n")
         await asyncio.Future()  # Run forever
 

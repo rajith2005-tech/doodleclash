@@ -24,6 +24,33 @@ const PALETTE_COLORS = [
   '#d946ef', '#854d0e', '#78350f', '#334155'
 ];
 
+const OFFLINE_WORD_POOL = [
+  { word: 'Elephant', hint: 'Large animal with a trunk', category: 'Animals' },
+  { word: 'Penguin', hint: 'Flightless bird in tuxedos', category: 'Animals' },
+  { word: 'Giraffe', hint: 'Tallest mammal with long neck', category: 'Animals' },
+  { word: 'Dolphin', hint: 'Intelligent aquatic mammal', category: 'Animals' },
+  { word: 'Kangaroo', hint: 'Hops and carries baby in pouch', category: 'Animals' },
+  { word: 'Octopus', hint: 'Sea creature with eight arms', category: 'Animals' },
+  { word: 'Cheetah', hint: 'Fastest land animal on Earth', category: 'Animals' },
+  { word: 'Butterfly', hint: 'Insect with colorful fluttery wings', category: 'Animals' },
+  { word: 'Pizza', hint: 'Italian cheesy pie with toppings', category: 'Food' },
+  { word: 'Hamburger', hint: 'Patty between two sesame buns', category: 'Food' },
+  { word: 'Sushi', hint: 'Rice rolled with seaweed & fish', category: 'Food' },
+  { word: 'Ice Cream', hint: 'Frozen sweet dessert in a cone', category: 'Food' },
+  { word: 'Pancake', hint: 'Flat round cake topped with syrup', category: 'Food' },
+  { word: 'Taco', hint: 'Crispy folded shell with spicy fillings', category: 'Food' },
+  { word: 'Guitar', hint: 'Stringed musical instrument', category: 'Objects' },
+  { word: 'Bicycle', hint: 'Two-wheeled pedal vehicle', category: 'Objects' },
+  { word: 'Clock', hint: 'Tells hours and minutes on the wall', category: 'Objects' },
+  { word: 'Umbrella', hint: 'Shields you from raindrops', category: 'Objects' },
+  { word: 'Rocket', hint: 'Blasts astronauts into outer space', category: 'Tech' },
+  { word: 'Laptop', hint: 'Portable computer device with screen', category: 'Tech' },
+  { word: 'Robot', hint: 'Mechanical automated cyber assistant', category: 'Tech' },
+  { word: 'Rainbow', hint: 'Colorful seven-color arc after rain', category: 'Nature' },
+  { word: 'Volcano', hint: 'Mountain spewing hot red lava', category: 'Nature' },
+  { word: 'Dragon', hint: 'Mythical flying fire-breathing beast', category: 'Fantasy' }
+];
+
 class DoodleApp {
   constructor() {
     this.ws = null;
@@ -36,6 +63,30 @@ class DoodleApp {
     this.drawingCanvas = null;
     this.confettiRunning = false;
 
+    // Multiplayer Modes & Network State
+    this.currentMode = 'online'; // 'online', 'lan', 'party', 'solo'
+    this.networkInfo = null;
+    this.customWsUrl = localStorage.getItem('doodleclash_ws_url') || null;
+    this.activeWsUrl = null;
+    this._triedFallback8001 = false;
+
+    // Local Pass & Play State
+    this.partyState = {
+      players: [
+        { id: 'p1', name: 'Alice', avatar: '🦊', score: 0 },
+        { id: 'p2', name: 'Bob', avatar: '🐼', score: 0 }
+      ],
+      rounds: 3,
+      timer: 60,
+      currentRound: 1,
+      currentDrawerIdx: 0,
+      activeWord: '',
+      activeCategory: '',
+      timerInterval: null,
+      timeLeft: 60,
+      guessesGuessed: new Set()
+    };
+
     this.init();
   }
 
@@ -44,6 +95,10 @@ class DoodleApp {
     this.setupColorPalette();
     this.setupCanvas();
     this.attachDOMListeners();
+    this.setupModeSwitcher();
+    this.setupServerAndTunnelModals();
+    this.setupPartyMode();
+    this.fetchNetworkInfo();
     this.connectWebSocket();
     this.setupIcons();
     this.checkUrlRoomParam();
@@ -59,10 +114,9 @@ class DoodleApp {
           inputJoin.value = roomCode.toUpperCase();
           this.openModal('joinRoomModal');
         }
-      }, 500);
+      }, 600);
     }
   }
-
 
   setupIcons() {
     if (window.lucide) {
@@ -70,18 +124,92 @@ class DoodleApp {
     }
   }
 
-  // --- WebSocket Connection ---
-  connectWebSocket() {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = window.location.hostname || 'localhost';
-    // Connect to WebSocket port 8001
-    const wsUrl = `${protocol}//${host}:8001`;
+  updateServerStatus(status, text) {
+    const dot = document.getElementById('serverStatusDot');
+    const label = document.getElementById('serverStatusText');
+    if (dot) {
+      dot.className = `status-indicator-dot ${status}`;
+    }
+    if (label) {
+      label.textContent = text;
+    }
+  }
 
+  async fetchNetworkInfo() {
+    try {
+      const res = await fetch('/api/network_info');
+      if (res.ok) {
+        const data = await res.json();
+        this.networkInfo = data;
+        const lanInput = document.getElementById('lanHostUrlDisplay');
+        if (lanInput && data.lan_url) lanInput.value = data.lan_url;
+
+        const lanQr = document.getElementById('lanQrCodeImage');
+        if (lanQr && data.lan_url) {
+          lanQr.src = `https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(data.lan_url)}`;
+        }
+      }
+    } catch (e) {
+      console.debug('Network info endpoint not available yet:', e);
+    }
+  }
+
+  // --- WebSocket URL Normalizer ---
+  _normalizeServerToWsUrl(addr) {
+    // Already a ws:// or wss:// URL
+    if (addr.startsWith('ws://') || addr.startsWith('wss://')) return addr;
+
+    // https:// → wss://,  http:// → ws://
+    if (addr.startsWith('https://')) return 'wss://' + addr.slice(8).replace(/\/+$/, '');
+    if (addr.startsWith('http://'))  return 'ws://'  + addr.slice(7).replace(/\/+$/, '');
+
+    // Bare IP:port  e.g. "192.168.1.5:8000"  or  "192.168.1.5"
+    const clean = addr.replace(/\/+$/, '');
+    return `ws://${clean}`;
+  }
+
+  // --- WebSocket Connection ---
+  connectWebSocket(customUrl = null) {
+    if (this.ws) {
+      try {
+        this.ws.onclose = null;
+        this.ws.close();
+      } catch (e) {}
+    }
+
+    this.updateServerStatus('connecting', 'Connecting...');
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const serverParam = urlParams.get('server');
+
+    let wsUrl = customUrl || serverParam || this.customWsUrl;
+    if (!wsUrl) {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const host = window.location.hostname || 'localhost';
+      const port = window.location.port;
+
+      // If running through tunnel or standard HTTP port (e.g. 8000 / 80 / 443 / no port)
+      if (protocol === 'wss:' || !port || port === '8000' || port === '80' || port === '443') {
+        wsUrl = `${protocol}//${window.location.host}`;
+      } else {
+        wsUrl = `${protocol}//${host}:8001`;
+      }
+    }
+
+    this.activeWsUrl = wsUrl;
     console.log(`Connecting to WebSocket at ${wsUrl}...`);
-    this.ws = new WebSocket(wsUrl);
+
+    try {
+      this.ws = new WebSocket(wsUrl);
+    } catch (err) {
+      console.error('Failed to create WebSocket instance:', err);
+      this.updateServerStatus('offline', 'Error');
+      return;
+    }
 
     this.ws.onopen = () => {
-      console.log('Connected to DoodleClash server!');
+      console.log('Connected to DoodleClash server at ' + wsUrl);
+      this.updateServerStatus('online', this.currentMode === 'lan' ? 'LAN Connected' : 'Online');
       this.send({ type: 'get_public_rooms' });
     };
 
@@ -95,12 +223,23 @@ class DoodleApp {
     };
 
     this.ws.onclose = () => {
-      console.warn('WebSocket connection closed. Reconnecting in 2s...');
-      setTimeout(() => this.connectWebSocket(), 2000);
+      console.warn('WebSocket connection closed.');
+      this.updateServerStatus('offline', 'Disconnected');
+
+      // If unified reverse proxy port connection closed and we haven't tried port 8001 yet, try port 8001
+      if (this.activeWsUrl && (this.activeWsUrl.includes(':8000') || !this.activeWsUrl.includes(':8001')) && !this._triedFallback8001) {
+        this._triedFallback8001 = true;
+        const fallbackUrl = `ws://${window.location.hostname || 'localhost'}:8001`;
+        console.log(`Attempting fallback to dedicated WebSocket port: ${fallbackUrl}`);
+        setTimeout(() => this.connectWebSocket(fallbackUrl), 500);
+      } else {
+        setTimeout(() => this.connectWebSocket(), 3000);
+      }
     };
 
     this.ws.onerror = (err) => {
       console.error('WebSocket encountered an error:', err);
+      this.updateServerStatus('offline', 'Connection Error');
     };
   }
 
@@ -304,13 +443,36 @@ class DoodleApp {
       btnConfirmJoin.onclick = () => {
         const code = document.getElementById('inputJoinRoomCode').value.trim().toUpperCase();
         const name = document.getElementById('playerNameInput').value.trim() || 'Artist';
+        const rawServerAddr = (document.getElementById('inputJoinServerAddress')?.value || '').trim();
         if (!code) return;
-        this.send({
-          type: 'join_room',
-          code,
-          name,
-          avatar: this.selectedAvatar
-        });
+
+        const doJoin = () => {
+          this.send({
+            type: 'join_room',
+            code,
+            name,
+            avatar: this.selectedAvatar
+          });
+        };
+
+        if (rawServerAddr) {
+          // User specified a remote server address — reconnect then join
+          const wsUrl = this._normalizeServerToWsUrl(rawServerAddr);
+          this.showToast(`Connecting to ${wsUrl}...`);
+          localStorage.setItem('doodleclash_ws_url', wsUrl);
+          this.customWsUrl = wsUrl;
+          this.connectWebSocket(wsUrl);
+          // Wait for connection to open, then join
+          const prevOnOpen = this.ws.onopen;
+          this.ws.onopen = (ev) => {
+            if (prevOnOpen) prevOnOpen.call(this.ws, ev);
+            doJoin();
+          };
+        } else {
+          // Same server — join immediately
+          doJoin();
+        }
+
         this.closeAllModals();
         window.soundEngine.playClick();
       };
@@ -387,9 +549,60 @@ class DoodleApp {
     const btnLeave = document.getElementById('btnLeaveRoom');
     if (btnLeave) {
       btnLeave.onclick = () => {
-        this.send({ type: 'leave_room' });
+        if (this.partyTimerInterval) {
+          clearInterval(this.partyTimerInterval);
+        }
+        const buzzerBar = document.getElementById('partyBuzzerBar');
+        if (buzzerBar) buzzerBar.style.display = 'none';
+
+        if (this.roomCode) {
+          this.send({ type: 'leave_room' });
+        }
         this.showView('homeView');
         this.send({ type: 'get_public_rooms' });
+        window.soundEngine.playClick();
+      };
+    }
+
+    // LAN Action Listeners
+    const btnCreateLan = document.getElementById('btnCreateLanRoom');
+    if (btnCreateLan) {
+      btnCreateLan.onclick = () => this.openModal('createRoomModal');
+    }
+
+    const btnJoinLan = document.getElementById('btnJoinLanRoom');
+    if (btnJoinLan) {
+      btnJoinLan.onclick = () => this.openModal('joinRoomModal');
+    }
+
+    const btnCopyLan = document.getElementById('btnCopyLanUrl');
+    if (btnCopyLan) {
+      btnCopyLan.onclick = () => {
+        const inp = document.getElementById('lanHostUrlDisplay');
+        if (inp) {
+          navigator.clipboard.writeText(inp.value);
+          this.showToast('LAN Host URL copied to clipboard!');
+          window.soundEngine.playClick();
+        }
+      };
+    }
+
+    const btnConnectLan = document.getElementById('btnConnectCustomLan');
+    if (btnConnectLan) {
+      btnConnectLan.onclick = () => {
+        const host = document.getElementById('inputCustomLanHost')?.value.trim();
+        if (!host) return;
+        const normalized = host.startsWith('http') ? host : `http://${host}`;
+        window.location.href = normalized;
+      };
+    }
+
+    const btnRefreshLan = document.getElementById('btnRefreshLanInfo');
+    if (btnRefreshLan) {
+      btnRefreshLan.onclick = () => {
+        this.fetchNetworkInfo();
+        this.send({ type: 'get_public_rooms' });
+        this.showToast('Refreshing LAN network status...');
         window.soundEngine.playClick();
       };
     }
@@ -525,10 +738,15 @@ class DoodleApp {
   }
 
   openShareModal() {
-    const protocol = window.location.protocol;
-    const host = window.location.host;
+    let baseOrigin = `${window.location.protocol}//${window.location.host}`;
+
+    // If host is on localhost and we have detected LAN IP, prioritize the LAN address so mobile devices can connect
+    if ((window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') && this.networkInfo && this.networkInfo.lan_url) {
+      baseOrigin = this.networkInfo.lan_url;
+    }
+
     const roomParam = this.roomCode ? `?room=${this.roomCode}` : '';
-    const shareUrl = `${protocol}//${host}/${roomParam}`;
+    const shareUrl = `${baseOrigin}/${roomParam}`;
 
     const urlInput = document.getElementById('shareUrlInput');
     if (urlInput) urlInput.value = shareUrl;
@@ -542,6 +760,598 @@ class DoodleApp {
     }
 
     this.openModal('shareModal');
+  }
+
+  // --- Multiplayer Mode Switcher ---
+  setupModeSwitcher() {
+    const tabs = [
+      { id: 'tabModeOnline', mode: 'online' },
+      { id: 'tabModeLocalLan', mode: 'lan' },
+      { id: 'tabModeParty', mode: 'party' },
+      { id: 'tabModeSolo', mode: 'solo' }
+    ];
+
+    tabs.forEach(({ id, mode }) => {
+      const btn = document.getElementById(id);
+      if (!btn) return;
+      btn.onclick = () => {
+        tabs.forEach(t => {
+          const el = document.getElementById(t.id);
+          if (el) el.classList.remove('active');
+        });
+        btn.classList.add('active');
+        this.switchMode(mode);
+        window.soundEngine.playClick();
+      };
+    });
+  }
+
+  switchMode(mode) {
+    this.currentMode = mode;
+
+    const stdProfile = document.getElementById('standardProfileSection');
+    const partySetup = document.getElementById('partySetupSection');
+    const actOnline = document.getElementById('actionsOnlineMode');
+    const actLan = document.getElementById('actionsLanMode');
+    const actParty = document.getElementById('actionsPartyMode');
+    const actSolo = document.getElementById('actionsSoloMode');
+
+    const rightOnline = document.getElementById('rightPanelOnline');
+    const rightLan = document.getElementById('rightPanelLan');
+    const rightParty = document.getElementById('rightPanelParty');
+    const rightSolo = document.getElementById('rightPanelSolo');
+
+    const badge = document.getElementById('modeHeroBadge');
+    const title = document.getElementById('modeHeroTitle');
+    const desc = document.getElementById('modeHeroDesc');
+
+    if (stdProfile) stdProfile.style.display = (mode === 'party') ? 'none' : 'block';
+    if (partySetup) partySetup.style.display = (mode === 'party') ? 'block' : 'none';
+
+    if (actOnline) actOnline.style.display = (mode === 'online') ? 'block' : 'none';
+    if (actLan) actLan.style.display = (mode === 'lan') ? 'block' : 'none';
+    if (actParty) actParty.style.display = (mode === 'party') ? 'block' : 'none';
+    if (actSolo) actSolo.style.display = (mode === 'solo') ? 'block' : 'none';
+
+    if (rightOnline) rightOnline.style.display = (mode === 'online') ? 'block' : 'none';
+    if (rightLan) rightLan.style.display = (mode === 'lan') ? 'block' : 'none';
+    if (rightParty) rightParty.style.display = (mode === 'party') ? 'block' : 'none';
+    if (rightSolo) rightSolo.style.display = (mode === 'solo') ? 'block' : 'none';
+
+    if (mode === 'online') {
+      if (badge) badge.innerHTML = '<i data-lucide="sparkles" style="width: 14px; height: 14px;"></i> <span>Real-Time Online Multiplayer</span>';
+      if (title) title.innerHTML = 'Draw, Guess, & <span>Clash!</span>';
+      if (desc) desc.textContent = 'Unleash your inner artist or guess hilarious doodles against players worldwide.';
+      this.updateServerStatus('online', 'Online');
+      this.send({ type: 'get_public_rooms' });
+    } else if (mode === 'lan') {
+      if (badge) badge.innerHTML = '<i data-lucide="wifi" style="width: 14px; height: 14px;"></i> <span>Local Wi-Fi & Hotspot Multiplayer</span>';
+      if (title) title.innerHTML = 'Play on <span>Local Wi-Fi!</span>';
+      if (desc) desc.textContent = 'Challenge family, roommates, or friends connected to the same Wi-Fi router or Mobile Hotspot.';
+      this.updateServerStatus('online', 'LAN Mode');
+      this.fetchNetworkInfo();
+      this.send({ type: 'get_public_rooms' });
+    } else if (mode === 'party') {
+      this.renderPartyRoster();
+      this.updateServerStatus('online', 'Local Party');
+    } else if (mode === 'solo') {
+      if (badge) badge.innerHTML = '<i data-lucide="bot" style="width: 14px; height: 14px;"></i> <span>Solo Practice vs AI</span>';
+      if (title) title.innerHTML = 'Practice with <span>DoodleBot!</span>';
+      if (desc) desc.textContent = 'DoodleBot will draw vector doodles or simulate human guesses to train your skills.';
+      this.updateServerStatus('online', 'Solo Practice');
+    }
+
+    this.setupIcons();
+  }
+
+  // --- Server Network & Tunnel Settings Modals ---
+  setupServerAndTunnelModals() {
+    const btnServer = document.getElementById('btnServerSettings');
+    if (btnServer) {
+      btnServer.onclick = () => {
+        const input = document.getElementById('inputCustomWsUrl');
+        if (input) input.value = this.activeWsUrl || '';
+        this.openModal('serverConfigModal');
+      };
+    }
+
+    const btnTest = document.getElementById('btnTestServerConnection');
+    const fb = document.getElementById('serverTestFeedback');
+    if (btnTest) {
+      btnTest.onclick = () => {
+        const url = document.getElementById('inputCustomWsUrl')?.value.trim();
+        if (!url) return;
+        if (fb) {
+          fb.style.display = 'block';
+          fb.style.color = '#38bdf8';
+          fb.textContent = `Pinging ${url}...`;
+        }
+        try {
+          const testWs = new WebSocket(url);
+          testWs.onopen = () => {
+            if (fb) {
+              fb.style.color = '#34d399';
+              fb.textContent = '✓ Server reachable & online!';
+            }
+            testWs.close();
+          };
+          testWs.onerror = () => {
+            if (fb) {
+              fb.style.color = '#f87171';
+              fb.textContent = '✗ Connection failed. Check server address and port.';
+            }
+          };
+        } catch (e) {
+          if (fb) {
+            fb.style.color = '#f87171';
+            fb.textContent = `✗ Invalid URL: ${e.message}`;
+          }
+        }
+      };
+    }
+
+    const btnSave = document.getElementById('btnSaveServerConfig');
+    if (btnSave) {
+      btnSave.onclick = () => {
+        const url = document.getElementById('inputCustomWsUrl')?.value.trim();
+        if (url) {
+          localStorage.setItem('doodleclash_ws_url', url);
+          this.customWsUrl = url;
+          this.connectWebSocket(url);
+          this.showToast('Connecting to ' + url);
+        }
+        this.closeAllModals();
+      };
+    }
+
+    // Server Presets
+    const pLocal8000 = document.getElementById('btnPresetLocalAuto');
+    if (pLocal8000) {
+      pLocal8000.onclick = () => {
+        const inp = document.getElementById('inputCustomWsUrl');
+        if (inp) inp.value = `ws://${window.location.hostname || 'localhost'}:8000`;
+      };
+    }
+    const pLocal8001 = document.getElementById('btnPresetLocal8001');
+    if (pLocal8001) {
+      pLocal8001.onclick = () => {
+        const inp = document.getElementById('inputCustomWsUrl');
+        if (inp) inp.value = `ws://${window.location.hostname || 'localhost'}:8001`;
+      };
+    }
+    const pAuto = document.getElementById('btnPresetAutoDetect');
+    if (pAuto) {
+      pAuto.onclick = () => {
+        const inp = document.getElementById('inputCustomWsUrl');
+        const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        if (inp) inp.value = `${proto}//${window.location.host}`;
+      };
+    }
+
+    // Host Tunnel Modal
+    const btnOpenTunnel = document.getElementById('btnOpenHostTunnelModal');
+    if (btnOpenTunnel) {
+      btnOpenTunnel.onclick = () => this.openModal('hostTunnelModal');
+    }
+
+    const btnCopyCmd = document.getElementById('btnCopyTunnelCommand');
+    if (btnCopyCmd) {
+      btnCopyCmd.onclick = () => {
+        navigator.clipboard.writeText('npx -y cloudflared tunnel --url http://localhost:8000');
+        this.showToast('Tunnel command copied to clipboard!');
+        window.soundEngine.playClick();
+      };
+    }
+
+    const btnApplyTunnel = document.getElementById('btnApplyTunnelUrl');
+    if (btnApplyTunnel) {
+      btnApplyTunnel.onclick = () => {
+        const val = document.getElementById('inputTunnelUrl')?.value.trim();
+        if (!val) return;
+        const normalized = val.replace(/\/+$/, '');
+        const roomCode = this.roomCode || 'GAME';
+        const inviteUrl = `${normalized}/?room=${roomCode}`;
+
+        const resultBox = document.getElementById('tunnelInviteResult');
+        const shareInput = document.getElementById('generatedOnlineShareUrl');
+        if (resultBox && shareInput) {
+          resultBox.style.display = 'block';
+          shareInput.value = inviteUrl;
+        }
+        window.soundEngine.playClick();
+      };
+    }
+
+    const btnCopyGenUrl = document.getElementById('btnCopyGeneratedOnlineUrl');
+    if (btnCopyGenUrl) {
+      btnCopyGenUrl.onclick = () => {
+        const shareInput = document.getElementById('generatedOnlineShareUrl');
+        if (shareInput && shareInput.value) {
+          navigator.clipboard.writeText(shareInput.value);
+          this.showToast('Online invite link copied to clipboard!');
+          window.soundEngine.playClick();
+        }
+      };
+    }
+  }
+
+  // --- Local Pass & Play Party Mode Engine ---
+  setupPartyMode() {
+    const btnAdd = document.getElementById('btnPartyAddPlayer');
+    const inputAdd = document.getElementById('partyAddNameInput');
+    if (btnAdd && inputAdd) {
+      btnAdd.onclick = () => {
+        const name = inputAdd.value.trim();
+        if (!name) return;
+        if (this.partyState.players.length >= 8) {
+          this.showToast('Maximum 8 players reached for Party Mode!');
+          return;
+        }
+        const avIndex = (this.partyState.players.length) % AVATARS.length;
+        this.partyState.players.push({
+          id: 'p' + (Date.now() % 10000),
+          name,
+          avatar: AVATARS[avIndex],
+          score: 0
+        });
+        inputAdd.value = '';
+        this.renderPartyRoster();
+        window.soundEngine.playClick();
+      };
+      inputAdd.onkeydown = (e) => {
+        if (e.key === 'Enter') btnAdd.click();
+      };
+    }
+
+    const btnStartParty = document.getElementById('btnStartPartyMatch');
+    if (btnStartParty) {
+      btnStartParty.onclick = () => this.startPartyGame();
+    }
+
+    const btnDrawerReady = document.getElementById('btnPartyDrawerReady');
+    if (btnDrawerReady) {
+      btnDrawerReady.onclick = () => this.handlePartyDrawerReady();
+    }
+
+    this.renderPartyRoster();
+  }
+
+  renderPartyRoster() {
+    const list = document.getElementById('partyRosterList');
+    const countTag = document.getElementById('partyPlayerCountTag');
+    if (!list) return;
+
+    if (countTag) countTag.textContent = `${this.partyState.players.length} Players`;
+
+    list.innerHTML = this.partyState.players.map((p, idx) => `
+      <div class="party-roster-item">
+        <div class="party-roster-left">
+          <span class="party-roster-avatar">${p.avatar}</span>
+          <span class="party-roster-name">${p.name}</span>
+        </div>
+        <div>
+          ${this.partyState.players.length > 2 ? `
+            <button type="button" class="party-roster-del" onclick="window.doodleApp.removePartyPlayer(${idx})" title="Remove Player">
+              <i data-lucide="trash" style="width: 14px; height: 14px;"></i>
+            </button>
+          ` : ''}
+        </div>
+      </div>
+    `).join('');
+
+    this.setupIcons();
+  }
+
+  removePartyPlayer(index) {
+    if (this.partyState.players.length <= 2) {
+      this.showToast('Party Mode requires at least 2 players!');
+      return;
+    }
+    this.partyState.players.splice(index, 1);
+    this.renderPartyRoster();
+    window.soundEngine.playClick();
+  }
+
+  startPartyGame() {
+    if (this.partyState.players.length < 2) {
+      this.showToast('Please add at least 2 players for Party Mode!');
+      return;
+    }
+
+    this.partyState.players.forEach(p => p.score = 0);
+    this.partyState.currentRound = 1;
+    this.partyState.currentDrawerIdx = 0;
+    this.partyState.rounds = parseInt(document.getElementById('partyRoundsSelect')?.value || '3', 10);
+    this.partyState.timer = parseInt(document.getElementById('partyTimerSelect')?.value || '60', 10);
+
+    window.soundEngine.playStartGame();
+    this.startPartyTurn();
+  }
+
+  startPartyTurn() {
+    if (this.partyState.currentDrawerIdx >= this.partyState.players.length) {
+      this.partyState.currentDrawerIdx = 0;
+      this.partyState.currentRound++;
+      if (this.partyState.currentRound > this.partyState.rounds) {
+        this.endPartyGame();
+        return;
+      }
+    }
+
+    const drawer = this.partyState.players[this.partyState.currentDrawerIdx];
+    this.partyState.guessesGuessed = new Set();
+
+    const veilName = document.getElementById('partyVeilName');
+    const veilAv = document.getElementById('partyVeilAvatar');
+    if (veilName) veilName.textContent = drawer.name;
+    if (veilAv) veilAv.textContent = drawer.avatar;
+
+    this.openModal('partyPrivacyModal');
+  }
+
+  handlePartyDrawerReady() {
+    this.closeAllModals();
+
+    const shuffled = [...OFFLINE_WORD_POOL].sort(() => 0.5 - Math.random());
+    const choices = shuffled.slice(0, 3);
+
+    const grid = document.getElementById('wordChoicesGrid');
+    if (grid) {
+      grid.innerHTML = '';
+      choices.forEach(c => {
+        const btn = document.createElement('button');
+        btn.className = 'word-choice-btn';
+        btn.innerHTML = `<div>${c.word}</div><div style="font-size: 11px; opacity: 0.8; font-weight: normal;">${c.hint}</div>`;
+        btn.onclick = () => {
+          this.choosePartyWord(c);
+          window.soundEngine.playClick();
+        };
+        grid.appendChild(btn);
+      });
+    }
+
+    const timerLabel = document.getElementById('wordChoiceTimer');
+    if (timerLabel) timerLabel.textContent = 'Secretly choose your word!';
+
+    this.openModal('wordChoiceModal');
+  }
+
+  choosePartyWord(choice) {
+    this.closeAllModals();
+    this.partyState.activeWord = choice.word;
+    this.partyState.activeCategory = choice.category;
+
+    const drawer = this.partyState.players[this.partyState.currentDrawerIdx];
+
+    this.showView('gameView');
+    this.isMyTurn = true;
+
+    if (this.drawingCanvas) {
+      this.drawingCanvas.clear();
+      this.drawingCanvas.setReadOnly(false);
+    }
+
+    const tb = document.getElementById('drawingToolbar');
+    if (tb) tb.style.display = 'flex';
+    const jb = document.getElementById('guessJudgeBar');
+    if (jb) jb.style.display = 'none';
+
+    const roundDisp = document.getElementById('gameRoundDisplay');
+    if (roundDisp) roundDisp.textContent = `Party Round ${this.partyState.currentRound} / ${this.partyState.rounds}`;
+
+    const catDisp = document.getElementById('wordCategoryDisplay');
+    if (catDisp) catDisp.textContent = `Category: ${choice.category} • Artist: ${drawer.name}`;
+
+    const hintDisp = document.getElementById('wordHintLetters');
+    if (hintDisp) hintDisp.textContent = `${choice.word} (${choice.hint})`;
+
+    this.updatePartyScoreboard();
+    this.setupPartyBuzzerBar();
+
+    this.partyState.timeLeft = this.partyState.timer;
+    const timerBox = document.getElementById('gameTimerBox');
+    if (timerBox) {
+      timerBox.textContent = this.partyState.timeLeft;
+      timerBox.classList.remove('urgent');
+    }
+
+    if (this.partyTimerInterval) clearInterval(this.partyTimerInterval);
+    this.partyTimerInterval = setInterval(() => this.partyTimerTick(), 1000);
+
+    window.soundEngine.playChime();
+  }
+
+  partyTimerTick() {
+    this.partyState.timeLeft--;
+    const timerBox = document.getElementById('gameTimerBox');
+    if (timerBox) {
+      timerBox.textContent = this.partyState.timeLeft;
+      if (this.partyState.timeLeft <= 10) timerBox.classList.add('urgent');
+    }
+
+    if (this.partyState.timeLeft <= 0) {
+      clearInterval(this.partyTimerInterval);
+      this.endPartyTurn('Time up!');
+    }
+  }
+
+  setupPartyBuzzerBar() {
+    const buzzerBar = document.getElementById('partyBuzzerBar');
+    const buzzerBtns = document.getElementById('partyBuzzerButtons');
+    if (!buzzerBar || !buzzerBtns) return;
+
+    buzzerBar.style.display = 'block';
+    buzzerBtns.innerHTML = '';
+
+    const drawer = this.partyState.players[this.partyState.currentDrawerIdx];
+    const guessers = this.partyState.players.filter(p => p.id !== drawer.id);
+
+    guessers.forEach(p => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'party-buzz-btn';
+      btn.innerHTML = `<span>${p.avatar}</span> <span>${p.name} Guessed!</span>`;
+      btn.onclick = () => {
+        this.awardPartyGuess(p);
+      };
+      buzzerBtns.appendChild(btn);
+    });
+
+    const skipBtn = document.createElement('button');
+    skipBtn.type = 'button';
+    skipBtn.className = 'party-buzz-btn';
+    skipBtn.style.background = 'rgba(239, 68, 68, 0.2)';
+    skipBtn.style.borderColor = 'rgba(239, 68, 68, 0.4)';
+    skipBtn.innerHTML = `<span>⏭️ Nobody Guessed</span>`;
+    skipBtn.onclick = () => {
+      clearInterval(this.partyTimerInterval);
+      this.endPartyTurn('Nobody guessed it!');
+    };
+    buzzerBtns.appendChild(skipBtn);
+  }
+
+  awardPartyGuess(guesser) {
+    if (this.partyState.guessesGuessed.has(guesser.id)) return;
+    this.partyState.guessesGuessed.add(guesser.id);
+
+    const timeBonus = Math.max(50, Math.floor((this.partyState.timeLeft / this.partyState.timer) * 250));
+    guesser.score += (250 + timeBonus);
+
+    const drawer = this.partyState.players[this.partyState.currentDrawerIdx];
+    drawer.score += 150;
+
+    window.soundEngine.playCorrect();
+    this.showToast(`🎉 ${guesser.name} guessed correctly! (+${250 + timeBonus} pts)`);
+
+    clearInterval(this.partyTimerInterval);
+    this.endPartyTurn(`${guesser.name} guessed it!`);
+  }
+
+  endPartyTurn(reason) {
+    if (this.partyTimerInterval) clearInterval(this.partyTimerInterval);
+
+    const buzzerBar = document.getElementById('partyBuzzerBar');
+    if (buzzerBar) buzzerBar.style.display = 'none';
+
+    const roundEndWord = document.getElementById('roundEndWord');
+    if (roundEndWord) roundEndWord.textContent = this.partyState.activeWord;
+
+    const lb = document.getElementById('roundEndLeaderboard');
+    if (lb) {
+      const sorted = [...this.partyState.players].sort((a, b) => b.score - a.score);
+      lb.innerHTML = sorted.map((p, i) => `
+        <div style="display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.06);">
+          <span>${i + 1}. ${p.avatar} ${p.name}</span>
+          <strong style="color: #34d399;">${p.score} pts</strong>
+        </div>
+      `).join('');
+    }
+
+    this.openModal('roundEndModal');
+
+    setTimeout(() => {
+      this.closeAllModals();
+      this.partyState.currentDrawerIdx++;
+      this.startPartyTurn();
+    }, 3200);
+  }
+
+  endPartyGame() {
+    if (this.partyTimerInterval) clearInterval(this.partyTimerInterval);
+
+    const sorted = [...this.partyState.players].sort((a, b) => b.score - a.score);
+    this.showPartyPodium(sorted);
+  }
+
+  showPartyPodium(ranked) {
+    const stage = document.getElementById('podiumStage');
+    if (stage) {
+      stage.innerHTML = '';
+      const p1 = ranked[0];
+      const p2 = ranked[1];
+      const p3 = ranked[2];
+
+      if (p2) {
+        stage.innerHTML += `
+          <div class="podium-pillar second-place">
+            <div class="podium-avatar">${p2.avatar}</div>
+            <div class="podium-name">${p2.name}</div>
+            <div class="podium-block">2<div class="podium-score-tag">${p2.score} pts</div></div>
+          </div>
+        `;
+      }
+      if (p1) {
+        stage.innerHTML += `
+          <div class="podium-pillar first-place">
+            <div class="podium-crown">👑</div>
+            <div class="podium-avatar">${p1.avatar}</div>
+            <div class="podium-name">${p1.name}</div>
+            <div class="podium-block">1<div class="podium-score-tag">${p1.score} pts</div></div>
+          </div>
+        `;
+      }
+      if (p3) {
+        stage.innerHTML += `
+          <div class="podium-pillar third-place">
+            <div class="podium-avatar">${p3.avatar}</div>
+            <div class="podium-name">${p3.name}</div>
+            <div class="podium-block">3<div class="podium-score-tag">${p3.score} pts</div></div>
+          </div>
+        `;
+      }
+    }
+
+    const awardsDiv = document.getElementById('podiumAwardsList');
+    if (awardsDiv && ranked.length > 0) {
+      awardsDiv.innerHTML = `
+        <div style="background: rgba(255,255,255,0.04); border-radius: 8px; padding: 8px; margin-bottom: 6px; font-size: 13px;">
+          <strong>🏆 Party Champion:</strong> ${ranked[0].name} with ${ranked[0].score} points!
+        </div>
+      `;
+    }
+
+    const btnRestart = document.getElementById('btnRestartGame');
+    if (btnRestart) {
+      btnRestart.style.display = 'inline-flex';
+      btnRestart.onclick = () => {
+        this.closeAllModals();
+        this.startPartyGame();
+      };
+    }
+
+    const btnReturn = document.getElementById('btnReturnToLobby');
+    if (btnReturn) {
+      btnReturn.onclick = () => {
+        this.closeAllModals();
+        this.showView('homeView');
+      };
+    }
+
+    this.openModal('podiumModal');
+    this.startConfetti();
+    window.soundEngine.playApplause();
+  }
+
+  updatePartyScoreboard() {
+    const list = document.getElementById('inGameScoreList');
+    const countTag = document.getElementById('playerCountTag');
+    if (!list) return;
+
+    if (countTag) countTag.textContent = `${this.partyState.players.length} Players`;
+    const drawer = this.partyState.players[this.partyState.currentDrawerIdx];
+
+    list.innerHTML = this.partyState.players.map(p => {
+      const isDrawing = (p.id === drawer.id);
+      return `
+        <div class="score-player-item ${isDrawing ? 'is-drawer' : ''}">
+          <div class="player-avatar-badge">${p.avatar}</div>
+          <div class="player-meta-box">
+            <div class="player-meta-name">${p.name} ${isDrawing ? '✏️ (Drawing)' : ''}</div>
+            <div class="player-meta-score">${p.score} pts</div>
+          </div>
+        </div>
+      `;
+    }).join('');
   }
 
   // --- Modal Utilities ---
@@ -605,7 +1415,27 @@ class DoodleApp {
         this.renderLobbyPlayers(data.room_state.players);
         this.renderLobbySettings(data.room_state.settings);
         this.updateHostControls();
+
+        // Show host IP quick-share card so others know what server address to use
+        if (this.isHost) {
+          const ipCard = document.getElementById('hostIpQuickCard');
+          const ipDisplay = document.getElementById('hostIpQuickDisplay');
+          const ipCopyBtn = document.getElementById('btnCopyHostIp');
+          const localIp = (this.networkInfo && this.networkInfo.local_ip) ? this.networkInfo.local_ip : window.location.hostname;
+          const port = (this.networkInfo && this.networkInfo.http_port) ? this.networkInfo.http_port : 8000;
+          const hostAddr = `${localIp}:${port}`;
+          if (ipCard) ipCard.style.display = 'block';
+          if (ipDisplay) ipDisplay.value = hostAddr;
+          if (ipCopyBtn && !ipCopyBtn._bound) {
+            ipCopyBtn._bound = true;
+            ipCopyBtn.onclick = () => {
+              navigator.clipboard.writeText(hostAddr);
+              this.showToast(`Host address ${hostAddr} copied! Share this with your friends.`);
+            };
+          }
+        }
         break;
+
 
       case 'player_joined':
       case 'bot_added':

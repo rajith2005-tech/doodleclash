@@ -19,6 +19,13 @@
     </div>
 
     <div class="header-actions">
+      <!-- Network / Server Status Button -->
+      <button id="btnServerSettings" class="btn-secondary server-status-btn" title="Multiplayer Network & Server Settings">
+        <span class="status-indicator-dot online" id="serverStatusDot"></span>
+        <span id="serverStatusText">Online</span>
+        <i data-lucide="network" style="width: 14px; height: 14px; margin-left: 4px;"></i>
+      </button>
+
       <div id="roomCodeHeaderBadge" class="room-code-badge" style="display: none;">
         <span class="code-title">Room:</span>
         <span class="code-value" id="headerRoomCode">------</span>
@@ -47,17 +54,58 @@
 
     <!-- 1. HOME / ENTRY VIEW -->
     <section id="homeView" class="view-section active">
+      <!-- Top Multiplayer Mode Switcher -->
+      <div class="mode-navigation-bar">
+        <button id="tabModeOnline" class="mode-nav-btn active" data-mode="online" title="Play with friends anywhere across the internet">
+          <i data-lucide="globe"></i>
+          <div class="btn-text-group">
+            <span class="btn-title">Online Multiplayer</span>
+            <span class="btn-subtitle">Internet & Cloud Rooms</span>
+          </div>
+          <span class="mode-badge-pill online">Global</span>
+        </button>
+
+        <button id="tabModeLocalLan" class="mode-nav-btn" data-mode="lan" title="Play with computers and phones on the same Wi-Fi">
+          <i data-lucide="wifi"></i>
+          <div class="btn-text-group">
+            <span class="btn-title">Local Wi-Fi / LAN</span>
+            <span class="btn-subtitle">Host IP & Mobile QR Code</span>
+          </div>
+          <span class="mode-badge-pill lan">Hotspot</span>
+        </button>
+
+        <button id="tabModeParty" class="mode-nav-btn" data-mode="party" title="2 to 8 players sharing this device">
+          <i data-lucide="users"></i>
+          <div class="btn-text-group">
+            <span class="btn-title">Pass & Play Party</span>
+            <span class="btn-subtitle">2-8 Players on Same Device</span>
+          </div>
+          <span class="mode-badge-pill party">Offline</span>
+        </button>
+
+        <button id="tabModeSolo" class="mode-nav-btn" data-mode="solo" title="Practice solo against AI DoodleBot">
+          <i data-lucide="bot"></i>
+          <div class="btn-text-group">
+            <span class="btn-title">Solo vs AI</span>
+            <span class="btn-subtitle">Play with DoodleBot</span>
+          </div>
+          <span class="mode-badge-pill solo">Practice</span>
+        </button>
+      </div>
+
       <div class="home-layout">
         
         <!-- Left: Profile & Join Setup Card -->
-        <div class="glass-panel hero-card">
-          <div>
-            <div class="hero-badge">
-              <i data-lucide="sparkles" style="width: 14px; height: 14px;"></i> Real-Time Multiplayer
+        <div class="glass-panel hero-card" id="homeHeroCard">
+          
+          <!-- Standard Profile (Online / LAN / Solo) -->
+          <div id="standardProfileSection">
+            <div class="hero-badge" id="modeHeroBadge">
+              <i data-lucide="sparkles" style="width: 14px; height: 14px;"></i> <span>Real-Time Online Multiplayer</span>
             </div>
-            <h1 class="hero-title">Draw, Guess, & <span>Clash!</span></h1>
-            <p class="hero-desc">
-              Unleash your inner artist or guess hilarious doodles against friends and intelligent AI bots in real time.
+            <h1 class="hero-title" id="modeHeroTitle">Draw, Guess, & <span>Clash!</span></h1>
+            <p class="hero-desc" id="modeHeroDesc">
+              Unleash your inner artist or guess hilarious doodles against friends in real time.
             </p>
 
             <!-- Avatar Picker -->
@@ -80,36 +128,145 @@
             </div>
           </div>
 
-          <div>
-            <!-- Create / Join Actions -->
-            <div class="action-buttons-row">
-              <button id="btnOpenCreateModal" class="btn-primary">
-                <i data-lucide="plus-circle" style="width: 18px; height: 18px;"></i> Create Room
-              </button>
-              <button id="btnOpenJoinModal" class="btn-secondary">
-                <i data-lucide="log-in" style="width: 18px; height: 18px;"></i> Join Code
+          <!-- Pass & Play Party Mode Setup Section (Visible when Party Mode selected) -->
+          <div id="partySetupSection" style="display: none;">
+            <div class="hero-badge" style="background: rgba(236, 72, 153, 0.15); color: #f472b6; border-color: rgba(236, 72, 153, 0.3);">
+              <i data-lucide="gamepad-2" style="width: 14px; height: 14px;"></i> Same-Device Local Party Mode
+            </div>
+            <h1 class="hero-title" style="font-size: 26px;">Pass & Play <span>Party!</span></h1>
+            <p class="hero-desc">
+              Pass this device around! Each player takes turns secretly drawing while others guess. No Wi-Fi or internet needed.
+            </p>
+
+            <!-- Party Player Roster -->
+            <div class="section-label" style="display: flex; justify-content: space-between; align-items: center;">
+              <span>Party Players (2–8)</span>
+              <span id="partyPlayerCountTag" style="font-size: 11px; color: var(--accent);">2 Players</span>
+            </div>
+
+            <div class="party-roster-list" id="partyRosterList">
+              <!-- Rendered via JS -->
+            </div>
+
+            <!-- Add Player Form -->
+            <div class="party-add-row" style="margin-top: 10px;">
+              <input type="text" id="partyAddNameInput" placeholder="New player name..." maxlength="14" style="flex: 1;">
+              <button type="button" id="btnPartyAddPlayer" class="btn-primary" style="padding: 8px 14px; font-size: 13px;">
+                <i data-lucide="user-plus" style="width: 16px; height: 16px;"></i> Add
               </button>
             </div>
 
-            <!-- Solo Play Banner -->
-            <div class="solo-mode-card">
+            <!-- Match Settings -->
+            <div style="margin-top: 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
               <div>
-                <div class="solo-mode-text">⚡ Solo Practice Mode</div>
-                <div style="font-size: 11px; color: var(--text-muted);">Play instantly with AI DoodleBot!</div>
+                <label class="section-label" style="font-size: 11px;">Rounds</label>
+                <select id="partyRoundsSelect" style="width: 100%;">
+                  <option value="1">1 Round</option>
+                  <option value="2">2 Rounds</option>
+                  <option value="3" selected>3 Rounds</option>
+                  <option value="4">4 Rounds</option>
+                  <option value="5">5 Rounds</option>
+                </select>
               </div>
-              <button id="btnPlaySolo" class="btn-accent" style="font-size: 12px; padding: 6px 12px;">
-                Play Now
+              <div>
+                <label class="section-label" style="font-size: 11px;">Draw Timer</label>
+                <select id="partyTimerSelect" style="width: 100%;">
+                  <option value="30">30 Seconds</option>
+                  <option value="45">45 Seconds</option>
+                  <option value="60" selected>60 Seconds</option>
+                  <option value="90">90 Seconds</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- Bottom Action Buttons Container -->
+          <div style="margin-top: 18px;">
+            
+            <!-- Online Mode Actions -->
+            <div id="actionsOnlineMode">
+              <div class="action-buttons-row">
+                <button id="btnOpenCreateModal" class="btn-primary">
+                  <i data-lucide="plus-circle" style="width: 18px; height: 18px;"></i> Create Online Room
+                </button>
+                <button id="btnOpenJoinModal" class="btn-secondary">
+                  <i data-lucide="log-in" style="width: 18px; height: 18px;"></i> Join Code
+                </button>
+              </div>
+
+              <!-- Host IP Quick-Share Banner (visible when a room exists) -->
+              <div id="hostIpQuickCard" style="display: none; margin-top: 10px; padding: 10px 12px; background: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.25); border-radius: 8px;">
+                <div style="font-size: 11px; font-weight: 700; color: #34d399; margin-bottom: 5px;">
+                  📡 Share your server address with friends so they can join:
+                </div>
+                <div style="display: flex; gap: 6px; align-items: center;">
+                  <input type="text" id="hostIpQuickDisplay" readonly
+                    style="font-size: 12px; font-family: monospace; color: #38bdf8; background: rgba(0,0,0,0.35); flex: 1; padding: 6px 8px; border-radius: 5px; border: 1px solid rgba(56,189,248,0.2);">
+                  <button id="btnCopyHostIp" class="btn-secondary" style="padding: 6px 10px; font-size: 12px; white-space: nowrap;">
+                    <i data-lucide="copy" style="width: 13px; height: 13px;"></i> Copy
+                  </button>
+                </div>
+              </div>
+
+              <!-- Host Online Internet Helper Banner -->
+              <div class="online-tunnel-card" id="btnOpenHostTunnelModal" style="cursor: pointer; margin-top: 12px;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                  <div class="tunnel-icon-box"><i data-lucide="cloud-lightning" style="width: 18px; height: 18px; color: #a5b4fc;"></i></div>
+                  <div>
+                    <div style="font-size: 13px; font-weight: 700; color: #e0e7ff;">Host Game Over the Internet</div>
+                    <div style="font-size: 11px; color: var(--text-muted);">Share a free 1-click tunnel link with anyone in the world</div>
+                  </div>
+                </div>
+                <i data-lucide="chevron-right" style="width: 16px; height: 16px; color: var(--text-dim);"></i>
+              </div>
+            </div>
+
+
+            <!-- LAN Mode Actions -->
+            <div id="actionsLanMode" style="display: none;">
+              <div class="action-buttons-row">
+                <button id="btnCreateLanRoom" class="btn-primary" style="background: linear-gradient(135deg, #06b6d4, #3b82f6);">
+                  <i data-lucide="wifi" style="width: 18px; height: 18px;"></i> Create LAN Room
+                </button>
+                <button id="btnJoinLanRoom" class="btn-secondary">
+                  <i data-lucide="log-in" style="width: 18px; height: 18px;"></i> Join LAN Code
+                </button>
+              </div>
+            </div>
+
+            <!-- Party Mode Actions -->
+            <div id="actionsPartyMode" style="display: none;">
+              <button id="btnStartPartyMatch" class="btn-primary" style="width: 100%; padding: 14px; font-size: 16px; font-weight: 800; background: linear-gradient(135deg, #ec4899, #8b5cf6);">
+                <i data-lucide="play" style="width: 20px; height: 20px;"></i> Start Party Match!
               </button>
             </div>
+
+            <!-- Solo Mode Actions -->
+            <div id="actionsSoloMode" style="display: none;">
+              <div style="margin-bottom: 12px;">
+                <label class="section-label">Bot Guessing Difficulty</label>
+                <select id="soloDifficultySelect" style="width: 100%;">
+                  <option value="easy">Casual (Forgiving & fun)</option>
+                  <option value="medium" selected>Clever (Realistic guesses)</option>
+                  <option value="hard">Genius (Super fast guesses)</option>
+                </select>
+              </div>
+              <button id="btnPlaySolo" class="btn-accent" style="width: 100%; padding: 14px; font-size: 15px; font-weight: 800;">
+                <i data-lucide="bot" style="width: 18px; height: 18px;"></i> Start Practice vs DoodleBot
+              </button>
+            </div>
+
           </div>
         </div>
 
-        <!-- Right: Public Rooms Browser Card -->
-        <div class="glass-panel rooms-card">
+        <!-- Right: Dynamic Right Panel (Switches per Mode) -->
+        
+        <!-- 1. Right Panel: Online Public Lobbies -->
+        <div class="glass-panel rooms-card" id="rightPanelOnline">
           <div class="rooms-header">
             <div>
-              <h3>Public Lobbies</h3>
-              <p style="font-size: 13px; color: var(--text-muted);">Hop into an active game right now</p>
+              <h3>Public Online Lobbies</h3>
+              <p style="font-size: 13px; color: var(--text-muted);">Hop into an active online match right now</p>
             </div>
             <button id="btnRefreshRooms" class="btn-icon" title="Refresh Lobbies">
               <i data-lucide="rotate-cw" style="width: 16px; height: 16px;"></i>
@@ -124,6 +281,150 @@
             <div style="text-align: center; color: var(--text-muted); padding: 40px 0;">
               <i data-lucide="compass" style="width: 32px; height: 32px; margin-bottom: 8px; opacity: 0.5;"></i>
               <p>Scanning for active rooms...</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. Right Panel: Local Wi-Fi / LAN Hub -->
+        <div class="glass-panel rooms-card" id="rightPanelLan" style="display: none;">
+          <div class="rooms-header">
+            <div>
+              <h3 style="display: flex; align-items: center; gap: 8px;">
+                <i data-lucide="wifi" style="width: 20px; height: 20px; color: var(--accent);"></i>
+                Wi-Fi & LAN Network Hub
+              </h3>
+              <p style="font-size: 13px; color: var(--text-muted);">Connect devices on your Wi-Fi or Mobile Hotspot</p>
+            </div>
+            <button id="btnRefreshLanInfo" class="btn-icon" title="Refresh Network Info">
+              <i data-lucide="rotate-cw" style="width: 16px; height: 16px;"></i>
+            </button>
+          </div>
+
+          <!-- Host LAN IP Card -->
+          <div class="lan-ip-card">
+            <div style="font-size: 11px; font-weight: 700; color: #a5b4fc; text-transform: uppercase; letter-spacing: 1px;">
+              📡 Your Local Network Address (Host)
+            </div>
+            <div style="display: flex; gap: 8px; align-items: center; margin: 8px 0;">
+              <input type="text" id="lanHostUrlDisplay" readonly value="http://localhost:8000" style="font-size: 14px; font-weight: 700; font-family: monospace; color: #38bdf8; background: rgba(0,0,0,0.4); flex: 1;">
+              <button type="button" id="btnCopyLanUrl" class="btn-primary" style="padding: 8px 14px; font-size: 13px;">
+                <i data-lucide="copy" style="width: 14px; height: 14px;"></i> Copy
+              </button>
+            </div>
+            <p style="font-size: 12px; color: var(--text-muted); line-height: 1.4;">
+              Anyone connected to your Wi-Fi or phone hotspot can enter this URL in their browser to join!
+            </p>
+          </div>
+
+          <!-- QR Code & Direct Join Split -->
+          <div style="display: grid; grid-template-columns: 140px 1fr; gap: 14px; align-items: center; margin: 16px 0; padding: 14px; background: rgba(255,255,255,0.03); border: 1px solid var(--border-glass); border-radius: var(--radius-md);">
+            <div style="text-align: center;">
+              <img id="lanQrCodeImage" alt="LAN Join QR" style="width: 120px; height: 120px; border-radius: 8px; background: white; padding: 5px; box-shadow: 0 4px 12px rgba(0,0,0,0.3);">
+              <div style="font-size: 10px; color: var(--text-muted); margin-top: 4px; font-weight: 600;">Scan with Phone</div>
+            </div>
+            <div>
+              <div style="font-size: 13px; font-weight: 700; margin-bottom: 4px;">Connect to another LAN Host:</div>
+              <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 8px;">Playing on a friend's hosted game? Enter their IP:</div>
+              <div style="display: flex; gap: 6px;">
+                <input type="text" id="inputCustomLanHost" placeholder="e.g. 192.168.1.50:8000" style="font-size: 12px; flex: 1; padding: 8px 10px;">
+                <button type="button" id="btnConnectCustomLan" class="btn-secondary" style="padding: 8px 12px; font-size: 12px;">
+                  Connect
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Active LAN Rooms List -->
+          <div>
+            <div style="font-size: 13px; font-weight: 700; margin-bottom: 8px; color: var(--text-main);">
+              Active LAN Lobbies
+            </div>
+            <div class="public-rooms-list" id="lanRoomsList" style="max-height: 160px;">
+              <div style="text-align: center; color: var(--text-muted); padding: 20px 0;">
+                <p style="font-size: 13px;">No active LAN rooms found. Create one to get started!</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3. Right Panel: Pass & Play Party Guide -->
+        <div class="glass-panel rooms-card" id="rightPanelParty" style="display: none;">
+          <div class="rooms-header">
+            <div>
+              <h3 style="display: flex; align-items: center; gap: 8px;">
+                <i data-lucide="gamepad-2" style="width: 20px; height: 20px; color: var(--secondary);"></i>
+                Party Mode Guide
+              </h3>
+              <p style="font-size: 13px; color: var(--text-muted);">How to play on a shared screen or tablet</p>
+            </div>
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 14px; font-size: 13px; line-height: 1.5; color: var(--text-muted); padding-top: 6px;">
+            <div style="display: flex; gap: 12px; align-items: flex-start;">
+              <div class="step-num-badge">1</div>
+              <div>
+                <strong style="color: var(--text-main);">Add 2 to 8 Players</strong>
+                <p>Enter the names and choose avatars for everyone playing in the room.</p>
+              </div>
+            </div>
+
+            <div style="display: flex; gap: 12px; align-items: flex-start;">
+              <div class="step-num-badge">2</div>
+              <div>
+                <strong style="color: var(--text-main);">Veiled Device Handoff</strong>
+                <p>When a turn starts, the screen is hidden. Pass the device to the drawer, who taps to secretly choose their word!</p>
+              </div>
+            </div>
+
+            <div style="display: flex; gap: 12px; align-items: flex-start;">
+              <div class="step-num-badge">3</div>
+              <div>
+                <strong style="color: var(--text-main);">Live Guessing & Party Buzzer</strong>
+                <p>Other players can shout guesses out loud or type them in. Tap a player's buzzer button to award instant points!</p>
+              </div>
+            </div>
+
+            <div style="display: flex; gap: 12px; align-items: flex-start;">
+              <div class="step-num-badge">4</div>
+              <div>
+                <strong style="color: var(--text-main);">Olympic Podium Awards</strong>
+                <p>Score points for quick guesses and smart drawings. The champion lifts the golden trophy with celebration confetti!</p>
+              </div>
+            </div>
+          </div>
+
+          <div style="margin-top: 20px; padding: 12px; border-radius: var(--radius-md); background: rgba(99, 102, 241, 0.1); border: 1px solid rgba(99, 102, 241, 0.25); font-size: 12px; color: #c7d2fe;">
+            💡 <strong>Party Tip:</strong> Connect your computer to a TV via HDMI or AirPlay/Chromecast for an unforgettable living room party!
+          </div>
+        </div>
+
+        <!-- 4. Right Panel: Solo Practice Guide -->
+        <div class="glass-panel rooms-card" id="rightPanelSolo" style="display: none;">
+          <div class="rooms-header">
+            <div>
+              <h3 style="display: flex; align-items: center; gap: 8px;">
+                <i data-lucide="bot" style="width: 20px; height: 20px; color: var(--accent);"></i>
+                AI DoodleBot Practice
+              </h3>
+              <p style="font-size: 13px; color: var(--text-muted);">Sharpen your drawing and guessing skills</p>
+            </div>
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 14px; font-size: 13px; line-height: 1.5; color: var(--text-muted); padding-top: 6px;">
+            <div style="display: flex; gap: 12px; align-items: flex-start;">
+              <div class="step-num-badge">🎨</div>
+              <div>
+                <strong style="color: var(--text-main);">AI Drawing Turns</strong>
+                <p>Watch DoodleBot draw vector sketches step-by-step in real time. Can you guess what it's drawing before anyone else?</p>
+              </div>
+            </div>
+
+            <div style="display: flex; gap: 12px; align-items: flex-start;">
+              <div class="step-num-badge">🤖</div>
+              <div>
+                <strong style="color: var(--text-main);">AI Human-like Guessing</strong>
+                <p>When you draw, DoodleBot analyzes your strokes and types simulated guesses with typos, thinking pauses, and reactions!</p>
+              </div>
             </div>
           </div>
         </div>
@@ -316,6 +617,17 @@
             </form>
           </div>
 
+          <!-- Pass & Play Party Buzzer / Award Points Bar (Visible during Pass & Play) -->
+          <div class="party-buzzer-bar" id="partyBuzzerBar" style="display: none;">
+            <div class="party-buzzer-header">
+              <i data-lucide="award" style="width: 16px; height: 16px; color: var(--warning);"></i>
+              <span>Party Buzz-In: Tap player who shouted it out correctly!</span>
+            </div>
+            <div class="party-buzzer-buttons" id="partyBuzzerButtons">
+              <!-- Populated with guesser buttons -->
+            </div>
+          </div>
+
 
         </div>
 
@@ -474,20 +786,37 @@
 
   <!-- Modal: Join Code -->
   <div class="modal-backdrop" id="joinRoomModal">
-    <div class="modal-content-card">
+    <div class="modal-content-card" style="max-width: 480px; text-align: left;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px;">
         <h3 style="font-size: 20px; font-weight: 800;">Join Room with Code</h3>
         <button class="btn-icon btn-close-modal"><i data-lucide="x"></i></button>
       </div>
 
-      <div class="setting-item" style="margin-bottom: 20px;">
-        <label>Enter 6-Character Room Code</label>
+      <div class="setting-item" style="margin-bottom: 16px;">
+        <label>Room Code</label>
         <input type="text" id="inputJoinRoomCode" placeholder="e.g. ABC123" maxlength="8" style="text-align: center; font-size: 22px; font-weight: 800; letter-spacing: 4px; text-transform: uppercase;">
+      </div>
+
+      <!-- Host Server Address - REQUIRED when joining from another computer -->
+      <div class="setting-item" style="margin-bottom: 6px;">
+        <label style="display: flex; align-items: center; gap: 6px;">
+          <i data-lucide="server" style="width: 14px; height: 14px; color: var(--primary);"></i>
+          Host Server Address <span style="font-size: 11px; color: var(--text-muted); font-weight: 400;">(leave blank if on same device)</span>
+        </label>
+        <input type="text" id="inputJoinServerAddress"
+          placeholder="e.g. 192.168.1.5:8000  or  https://abc.trycloudflare.com"
+          style="font-size: 13px; font-family: monospace; color: #38bdf8;">
+      </div>
+      <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 18px; line-height: 1.5; padding: 8px 10px; background: rgba(99,102,241,0.07); border-radius: 6px; border: 1px solid rgba(99,102,241,0.15);">
+        💡 <strong style="color: var(--text-main);">Playing on a different computer?</strong>
+        Ask the host for their IP (shown in the LAN tab) or tunnel URL, then paste it above so you connect to the same server.
       </div>
 
       <div style="display: flex; gap: 10px; justify-content: center;">
         <button class="btn-secondary btn-close-modal">Cancel</button>
-        <button id="btnConfirmJoinRoom" class="btn-primary">Enter Lobby</button>
+        <button id="btnConfirmJoinRoom" class="btn-primary">
+          <i data-lucide="log-in" style="width: 16px; height: 16px;"></i> Enter Lobby
+        </button>
       </div>
     </div>
   </div>
@@ -562,6 +891,129 @@
       <div style="font-size: 12px; color: var(--text-dim); line-height: 1.4;">
         💡 <em>Note: Make sure your friends are connected to the same Wi-Fi router or Mobile Hotspot.</em>
       </div>
+    </div>
+  </div>
+
+  <!-- Modal: Multiplayer Network & Server Settings -->
+  <div class="modal-backdrop" id="serverConfigModal">
+    <div class="modal-content-card" style="text-align: left; max-width: 520px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+        <h3 style="font-size: 20px; font-weight: 800; display: flex; align-items: center; gap: 8px;">
+          <i data-lucide="network" style="color: var(--primary);"></i> Network & Server Settings
+        </h3>
+        <button class="btn-icon btn-close-modal"><i data-lucide="x"></i></button>
+      </div>
+
+      <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 16px; line-height: 1.5;">
+        Configure where DoodleClash connects. You can use your local server, a friend's LAN IP, a Cloudflare tunnel, or an online cloud server.
+      </p>
+
+      <div class="setting-item" style="margin-bottom: 14px;">
+        <label>Active WebSocket Server URL</label>
+        <div style="display: flex; gap: 8px;">
+          <input type="text" id="inputCustomWsUrl" placeholder="ws://localhost:8000" style="font-size: 13px; font-weight: 600; font-family: monospace; flex: 1;">
+          <button id="btnTestServerConnection" class="btn-secondary" style="padding: 8px 14px; font-size: 12px;">Test</button>
+        </div>
+        <div id="serverTestFeedback" style="font-size: 12px; margin-top: 6px; display: none;"></div>
+      </div>
+
+      <!-- Quick Server Presets -->
+      <div style="margin-bottom: 20px;">
+        <label class="section-label" style="font-size: 11px;">Quick Presets</label>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+          <button type="button" class="btn-secondary preset-btn" id="btnPresetLocalAuto" style="font-size: 12px; padding: 6px 12px;">
+            🏠 Unified Local (Port 8000)
+          </button>
+          <button type="button" class="btn-secondary preset-btn" id="btnPresetLocal8001" style="font-size: 12px; padding: 6px 12px;">
+            ⚡ Direct WS (Port 8001)
+          </button>
+          <button type="button" class="btn-secondary preset-btn" id="btnPresetAutoDetect" style="font-size: 12px; padding: 6px 12px;">
+            🌐 Auto (This Host)
+          </button>
+        </div>
+      </div>
+
+      <div style="display: flex; gap: 10px; justify-content: flex-end;">
+        <button class="btn-secondary btn-close-modal">Cancel</button>
+        <button id="btnSaveServerConfig" class="btn-primary">Save & Connect</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Host Online (Tunnel Assistant) -->
+  <div class="modal-backdrop" id="hostTunnelModal">
+    <div class="modal-content-card" style="text-align: left; max-width: 560px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+        <h3 style="font-size: 20px; font-weight: 800; display: flex; align-items: center; gap: 8px;">
+          <i data-lucide="cloud-lightning" style="color: #818cf8;"></i> Host Game Across the Internet
+        </h3>
+        <button class="btn-icon btn-close-modal"><i data-lucide="x"></i></button>
+      </div>
+
+      <p style="color: var(--text-muted); font-size: 13px; line-height: 1.5; margin-bottom: 16px;">
+        You can host a game and invite anyone anywhere in the world using a free, secure tunnel without port forwarding!
+      </p>
+
+      <!-- Step 1 -->
+      <div style="margin-bottom: 14px; padding: 12px; background: rgba(255,255,255,0.03); border: 1px solid var(--border-glass); border-radius: var(--radius-md);">
+        <div style="font-size: 13px; font-weight: 700; color: #a5b4fc; margin-bottom: 6px;">
+          Step 1: Run Cloudflare Tunnel in Terminal or Command Prompt
+        </div>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <code style="font-size: 12px; background: rgba(0,0,0,0.5); padding: 8px 12px; border-radius: 6px; flex: 1; color: #38bdf8; font-family: monospace; user-select: all;">npx -y cloudflared tunnel --url http://localhost:8000</code>
+          <button id="btnCopyTunnelCommand" class="btn-secondary" style="padding: 6px 12px; font-size: 12px;">Copy</button>
+        </div>
+      </div>
+
+      <!-- Step 2 -->
+      <div style="margin-bottom: 16px; padding: 12px; background: rgba(255,255,255,0.03); border: 1px solid var(--border-glass); border-radius: var(--radius-md);">
+        <div style="font-size: 13px; font-weight: 700; color: #a5b4fc; margin-bottom: 6px;">
+          Step 2: Paste the generated trycloudflare URL
+        </div>
+        <div style="display: flex; gap: 8px;">
+          <input type="text" id="inputTunnelUrl" placeholder="https://xxxxxx.trycloudflare.com" style="font-size: 13px; flex: 1;">
+          <button id="btnApplyTunnelUrl" class="btn-primary" style="padding: 8px 14px; font-size: 12px;">Create Link</button>
+        </div>
+      </div>
+
+      <!-- Generated Online Invite Link -->
+      <div id="tunnelInviteResult" style="display: none; margin-bottom: 14px; padding: 12px; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: var(--radius-md);">
+        <div style="font-size: 12px; font-weight: 700; color: #34d399; margin-bottom: 6px;">
+          🎉 Online Invite Link Ready to Share!
+        </div>
+        <div style="display: flex; gap: 8px;">
+          <input type="text" id="generatedOnlineShareUrl" readonly style="font-size: 12px; color: #a7f3d0; background: rgba(0,0,0,0.3); flex: 1;">
+          <button id="btnCopyGeneratedOnlineUrl" class="btn-primary" style="padding: 6px 12px; font-size: 12px;">Copy Link</button>
+        </div>
+      </div>
+
+      <div style="text-align: right;">
+        <button class="btn-secondary btn-close-modal">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Pass & Play Privacy Veil (Device Handoff) -->
+  <div class="modal-backdrop" id="partyPrivacyModal" style="backdrop-filter: blur(35px); -webkit-backdrop-filter: blur(35px); background: rgba(10, 14, 23, 0.95);">
+    <div class="modal-content-card" style="max-width: 480px; text-align: center; padding: 36px 24px;">
+      <div style="font-size: 54px; margin-bottom: 12px; animation: bounce 2s infinite;">🤫</div>
+      <h2 style="font-size: 28px; font-weight: 900; margin-bottom: 6px;">Pass the Device!</h2>
+      <p style="color: var(--text-muted); font-size: 15px; margin-bottom: 20px;">
+        Other players, look away! Hand this screen to:
+      </p>
+
+      <div style="background: rgba(236, 72, 153, 0.15); border: 2px solid rgba(236, 72, 153, 0.4); border-radius: var(--radius-lg); padding: 16px; margin-bottom: 24px; display: inline-flex; align-items: center; gap: 12px;">
+        <span id="partyVeilAvatar" style="font-size: 32px;">🦊</span>
+        <span id="partyVeilName" style="font-size: 24px; font-weight: 800; color: #f472b6;">Alice</span>
+      </div>
+
+      <p style="color: var(--text-dim); font-size: 13px; margin-bottom: 24px;">
+        Make sure no one else can see the screen before revealing your secret words.
+      </p>
+
+      <button id="btnPartyDrawerReady" class="btn-primary" style="padding: 14px 28px; font-size: 16px; font-weight: 800; background: linear-gradient(135deg, #ec4899, #8b5cf6); width: 100%;">
+        I'm Ready — Show Secret Words!
+      </button>
     </div>
   </div>
 
